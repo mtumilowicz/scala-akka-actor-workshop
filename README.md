@@ -10,3 +10,4 @@
 * Typed Actors are implemented using JDK Proxies which provide a pretty easy-worked API to intercept method calls.
 * Just as with regular Akka Actors, Typed Actors process one call at a time.
 * supervision?
+* receptionist?
