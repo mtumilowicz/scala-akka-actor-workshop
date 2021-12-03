@@ -18,16 +18,15 @@ case class DebitAccount(raw: Int) extends AccountOperation
 case class GetBalance(replyTo: ActorRef[Int]) extends AccountOperation
 
 object AccountActor {
-  def apply(): Behavior[AccountOperation] = Behaviors.setup { context =>
-    var balance = 0
+  def apply(): Behavior[AccountOperation] =
+    behavior(0)
 
+  private def behavior(balance: Int): Behavior[AccountOperation] = Behaviors.setup { context =>
     Behaviors.receiveMessage {
       case CreditAccount(amount) =>
-        balance += amount
-        Behaviors.same
+        behavior(balance + amount)
       case DebitAccount(amount) =>
-        balance -= amount
-        Behaviors.same
+        behavior(balance - amount)
       case GetBalance(sender) =>
         sender ! balance
         Behaviors.same
