@@ -7,21 +7,14 @@ import akka.util.Timeout
 import java.util.concurrent.TimeUnit
 import scala.util.Success
 
-object Addition {
-  def apply(): Behavior[Operations.Calculate] = Behaviors.setup { context =>
-    Behaviors.receiveMessage[Operations.Calculate]{
-      message =>
-        context.log.info(s"${message.a} + ${message.b} = ${message.a + message.b}")
-        Behaviors.same
-    }
-  }
-}
+case class Addition(id: String) {
 
-object Multiplication {
-  def apply(): Behavior[Operations.Calculate] = Behaviors.setup { context =>
+  val serviceKey = ServiceKey[Operations.Calculate](id)
+
+  def behavior(): Behavior[Operations.Calculate] = Behaviors.setup { context =>
     Behaviors.receiveMessage[Operations.Calculate]{
       message =>
-        context.log.info(s"${message.a} * ${message.b} = ${message.a * message.b}")
+        context.log.info(s"$id: ${message.a} + ${message.b} = ${message.a + message.b}")
         Behaviors.same
     }
   }
@@ -31,19 +24,18 @@ object Operations {
   final case class Setup()
   final case class Calculate(a: Int, b: Int)
 
-  val AdditionKey = ServiceKey[Operations.Calculate]("addition")
-  val MultiplicationKey = ServiceKey[Operations.Calculate]("multiplication")
-
   def apply(): Behavior[Setup] = Behaviors.setup{ context =>
     Behaviors.receiveMessage[Setup]{ _ =>
       context.log.info("Registering operations...")
 
-      val addition = context.spawnAnonymous(Addition())
-      context.system.receptionist ! Receptionist.Register(Operations.AdditionKey, addition)
+      val a = Addition("1")
+      val addition = context.spawnAnonymous(a.behavior())
+      context.system.receptionist ! Receptionist.Register(a.serviceKey, addition)
       context.log.info("Registered addition")
 
-      val multiplication = context.spawnAnonymous(Multiplication())
-      context.system.receptionist ! Receptionist.Register(Operations.MultiplicationKey, multiplication)
+      val a2 = Addition("2")
+      val multiplication = context.spawnAnonymous(a2.behavior())
+      context.system.receptionist ! Receptionist.Register(a2.serviceKey, multiplication)
       context.log.info("Registered multiplication")
 
       Behaviors.same
@@ -53,8 +45,8 @@ object Operations {
 
 object RegistrationListener {
   def apply(): Behavior[Receptionist.Listing] = Behaviors.setup{ context =>
-    context.system.receptionist ! Receptionist.Subscribe(Operations.AdditionKey, context.self)
-    context.system.receptionist ! Receptionist.Subscribe(Operations.MultiplicationKey, context.self)
+    context.system.receptionist ! Receptionist.Subscribe(Addition("1").serviceKey, context.self)
+    context.system.receptionist ! Receptionist.Subscribe(Addition("2").serviceKey, context.self)
 
     Behaviors.receiveMessage[Receptionist.Listing] {
       listing =>
@@ -72,10 +64,12 @@ object Calculator {
   final case class Calculate(operation: String, a: Int, b: Int) extends Command
   final case class CalculateUsingOperation(operation: ActorRef[Operations.Calculate], a: Int, b: Int) extends Command
 
-  private def getKey = (operationName: String) => {
+  private def getKey: String => ServiceKey[Operations.Calculate] = (operationName: String) => {
+    val x: Any = Addition("1").serviceKey
+
     operationName match {
-      case "addition" => Operations.AdditionKey
-      case "multiplication" => Operations.MultiplicationKey
+      case "addition" => Addition("1").serviceKey
+      case "multiplication" => Addition("2").serviceKey
     }
   }
 
