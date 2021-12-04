@@ -54,13 +54,14 @@ object Progress extends App {
   implicit val timeout: Timeout = 3.seconds
   // implicit ActorSystem in scope
   implicit val system: ActorSystem[AccountOperation] = ActorSystem(AccountActor(), "AccountActor")
+  val accountActorRef: ActorRef[AccountOperation] = system
   implicit val ec = system.executionContext
 
-  system ! CreditAccount(100)
-  system ! DebitAccount(30)
-  system ! CreditAccount(800)
+  accountActorRef ! CreditAccount(100)
+  accountActorRef ! DebitAccount(30)
+  accountActorRef ! CreditAccount(800)
 
-  val result: Future[Int] = system ? GetBalance
+  val result: Future[Int] = accountActorRef ? GetBalance
 
   result.onComplete {
     case Failure(exception) => println(exception)
