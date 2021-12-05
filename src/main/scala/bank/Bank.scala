@@ -17,12 +17,12 @@ case class Account(id: String) {
 
   val serviceKey: ServiceKey[AccountOperations] = ServiceKey[AccountOperations](id)
 
-  def behavior(): Behavior[AccountOperations] = Behaviors.setup { context =>
-    println(s"Account with id = $id initialized")
-    Behaviors.receiveMessage {
-      case CreditAccount(amount) => println(s"Account with id = $id was credited with $amount")
-        Behaviors.same
-    }
+  def behavior(): Behavior[AccountOperations] = behavior(0)
+
+  def behavior(balance: Int): Behavior[AccountOperations] = Behaviors.receiveMessage {
+    case CreditAccount(amount) =>
+      println(s"Account with id = $id was credited with $amount")
+      behavior(balance + amount)
   }
 }
 
