@@ -64,13 +64,9 @@ object Calculator {
   final case class Calculate(operation: String, a: Int, b: Int) extends Command
   final case class CalculateUsingOperation(operation: ActorRef[Operations.Calculate], a: Int, b: Int) extends Command
 
-  private def getKey: String => ServiceKey[Operations.Calculate] = (operationName: String) => {
-    val x: Any = Addition("1").serviceKey
-
-    operationName match {
-      case "addition" => Addition("1").serviceKey
-      case "multiplication" => Addition("2").serviceKey
-    }
+  private def getKey: String => ServiceKey[Operations.Calculate] = {
+    case "addition" => Addition("1").serviceKey
+    case "multiplication" => Addition("2").serviceKey
   }
 
   def apply(): Behavior[Command] =
