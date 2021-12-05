@@ -1,19 +1,23 @@
 package bank
 
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
-import akka.actor.typed.scaladsl.AskPattern.Askable
+import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
-import bank.Bank.{BalanceResponse, BankOperations, CreateAccount, CreditAccountById, GetBalanceById, find}
+import app.Progress.{result, system}
+import bank.Bank.{BankOperations, CreateAccount, CreditAccountById, GetBalanceById, find}
 
 import java.util.concurrent.TimeUnit
-import scala.util.Success
+import scala.concurrent.Future
+import scala.concurrent.duration.DurationInt
+import scala.util.{Failure, Success}
 
 sealed trait AccountOperations
 
 case class CreditAccount(amount: Int) extends AccountOperations
 case class GetBalance(replyTo: ActorRef[BalanceResponse]) extends AccountOperations
+case class BalanceResponse(id: String, balance: Int)
 
 case class Account(id: String) {
 
@@ -25,8 +29,8 @@ case class Account(id: String) {
     case CreditAccount(amount) =>
       println(s"Account with id = $id was credited with $amount")
       behavior(balance + amount)
-    case GetBalance(sender) =>
-      sender ! BalanceResponse(balance)
+    case GetBalance(replyTo) =>
+      replyTo ! BalanceResponse(id, balance)
       Behaviors.same
   }
 }
@@ -38,15 +42,14 @@ object Bank {
   sealed trait AccountStateOperations extends BankOperations
 
   case class CreditAccountById(id: String, amount: Int) extends AccountStateOperations
-  case class GetBalanceById(id: String) extends AccountStateOperations
-  case class BalanceResponse(balance: Int) extends AccountStateOperations
+  case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
 
   sealed trait AccountsManagementOperations extends BankOperations
 
   case class CreateAccount(id: String) extends AccountsManagementOperations
 
   private case class AccountToCredit(account: ActorRef[AccountOperations], amount: Int) extends AccountStateOperations
-  private case class AccountToGetBalance(account: ActorRef[AccountOperations]) extends AccountStateOperations
+  private case class AccountToGetBalance(account: ActorRef[AccountOperations], replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
 
   private case class AccountCreditFailed(reason: String) extends AccountStateOperations
 
@@ -69,11 +72,8 @@ object Bank {
     case AccountToCredit(account, amount) =>
       account ! CreditAccount(amount)
       Behaviors.same
-    case AccountToGetBalance(account) =>
-      account ! GetBalance(context.self)
-      Behaviors.same
-    case BalanceResponse(balance) =>
-      println(balance)
+    case AccountToGetBalance(account, replyTo) =>
+      account ! GetBalance(replyTo)
       Behaviors.same
     case AccountCreditFailed(reason) =>
       println(reason)
@@ -85,8 +85,8 @@ object Bank {
           .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
 
         Behaviors.same
-      case GetBalanceById(id) =>
-        find(id, context, _.headOption.map(AccountToGetBalance)
+      case GetBalanceById(id, replyTo) =>
+        find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
           .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
 
         Behaviors.same
@@ -111,15 +111,23 @@ object Bank {
 }
 
 object Main extends App {
-  val system: ActorSystem[BankOperations] =
+
+  implicit val timeout: Timeout = 3.seconds
+  implicit val system: ActorSystem[BankOperations] =
     ActorSystem(Bank(), "bank")
+  implicit val ec = system.executionContext
 
   system ! CreateAccount("1")
   system ! CreateAccount("2")
   system ! CreditAccountById("1", 100)
   system ! CreditAccountById("2", 150)
   system ! CreditAccountById("3", 99)
-  system ! GetBalanceById("1")
+  val result: Future[BalanceResponse] = system.ask(GetBalanceById("1", _))
+
+  result.onComplete {
+    case Failure(exception) => println(exception)
+    case Success(value) => println(value)
+  }
 
   system.terminate()
 }
