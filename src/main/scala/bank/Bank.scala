@@ -4,7 +4,7 @@ import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
-import bank.Bank.{BankOperations, CreateAccount, CreditAccountById}
+import bank.Bank.{BankOperations, CreateAccount, CreditAccountById, find}
 
 import java.util.concurrent.TimeUnit
 import scala.util.{Failure, Success}
@@ -38,32 +38,18 @@ object Bank {
 
   case class CreateAccount(id: String) extends AccountsManagementOperations
 
-  private case class AccountToCredit(account: ActorRef[AccountOperations], amount: Int) extends BankOperations
+  private case class AccountToCredit(account: ActorRef[AccountOperations], amount: Int) extends AccountStateOperations
 
-  private case class AccountCreditFailed(reason: String) extends BankOperations
+  private case class AccountCreditFailed(reason: String) extends AccountStateOperations
 
   private case class FindFailed(reason: String) extends BankOperations
 
-  def apply(): Behavior[BankOperations] = Behaviors.receive { (context, message) =>
-    message match {
-      case AccountToCredit(account, amount) =>
-        account ! CreditAccount(amount)
-        Behaviors.same
-      case AccountCreditFailed(reason) =>
-        println(reason)
-        Behaviors.same
+  def apply(): Behavior[BankOperations] = Behaviors.setup { context =>
+    Behaviors.receiveMessagePartial(
+    accountStateOps(context).orElse {
       case FindFailed(reason) =>
         println(reason)
         Behaviors.same
-      case operations: AccountStateOperations => operations match {
-        case CreditAccountById(id, amount) =>
-
-          find(id, context, _.headOption.map(AccountToCredit(_, amount))
-            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
-
-          Behaviors.same
-      }
-
       case operations: AccountsManagementOperations => operations match {
         case CreateAccount(id) =>
           val account = Account(id)
@@ -71,6 +57,24 @@ object Bank {
           context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
           Behaviors.same
       }
+    }
+    )
+  }
+
+  private def accountStateOps(context: ActorContext[BankOperations]): PartialFunction[BankOperations, Behavior[BankOperations]] = {
+    case AccountToCredit(account, amount) =>
+      account ! CreditAccount(amount)
+      Behaviors.same
+    case AccountCreditFailed(reason) =>
+      println(reason)
+      Behaviors.same
+    case operations: AccountStateOperations => operations match {
+      case CreditAccountById(id, amount) =>
+
+        find(id, context, _.headOption.map(AccountToCredit(_, amount))
+          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+
+        Behaviors.same
     }
   }
 
