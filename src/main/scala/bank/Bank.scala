@@ -1,7 +1,7 @@
 package bank
 
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
-import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.Bank.{BankOperations, CreateAccount, CreditAccountById}
@@ -39,7 +39,10 @@ object Bank {
   case class CreateAccount(id: String) extends AccountsManagementOperations
 
   private case class AccountToCredit(account: ActorRef[AccountOperations], amount: Int) extends BankOperations
+
   private case class AccountCreditFailed(reason: String) extends BankOperations
+
+  private case class FindFailed(reason: String) extends BankOperations
 
   def apply(): Behavior[BankOperations] = Behaviors.receive { (context, message) =>
     message match {
@@ -49,24 +52,15 @@ object Bank {
       case AccountCreditFailed(reason) =>
         println(reason)
         Behaviors.same
+      case FindFailed(reason) =>
+        println(reason)
+        Behaviors.same
       case operations: AccountStateOperations => operations match {
         case CreditAccountById(id, amount) =>
 
-          implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
+          find(id, context, _.headOption.map(AccountToCredit(_, amount))
+            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
 
-          val serviceKey = ServiceKey[AccountOperations](id)
-
-          context.ask(
-            context.system.receptionist,
-            Receptionist.Find(serviceKey)
-          ) {
-            case Success(listing) =>
-              val instances = listing.serviceInstances(serviceKey)
-              instances.headOption.map(AccountToCredit(_, amount))
-                .getOrElse(AccountCreditFailed(s"account with id = $id does not exist"))
-            case Failure(exception) =>
-              AccountCreditFailed(exception.getMessage)
-          }
           Behaviors.same
       }
 
@@ -79,6 +73,23 @@ object Bank {
       }
     }
   }
+
+  def find(id: String, context: ActorContext[BankOperations], f: Set[ActorRef[AccountOperations]] => BankOperations): Unit = {
+    implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
+
+    val serviceKey = ServiceKey[AccountOperations](id)
+
+    context.ask(
+      context.system.receptionist,
+      Receptionist.Find(serviceKey)
+    ) {
+      case Success(listing) =>
+        f(listing.serviceInstances(serviceKey))
+      case Failure(exception) =>
+        FindFailed(exception.getMessage)
+    }
+  }
+
 
 }
 
