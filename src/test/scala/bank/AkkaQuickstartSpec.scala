@@ -3,7 +3,7 @@ package bank
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import bank.AccountProtocol.BalanceResponse
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetBalanceById
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import org.scalatest.wordspec.AnyWordSpecLike
 
@@ -17,7 +17,7 @@ class AkkaQuickstartSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike 
       val replyProbe = createTestProbe[BalanceResponse]()
       val underTest = spawn(Bank())
       underTest ! CreateAccount("1")
-      underTest ! GetBalanceById("1", replyProbe.ref)
+      underTest ! GetAccountBalance(Left("1"), replyProbe.ref)
       replyProbe.expectMessage(BalanceResponse("1", 0))
     }
     //#test

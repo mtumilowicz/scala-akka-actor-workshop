@@ -8,7 +8,7 @@ import bank.AccountProtocol._
 object AccountProtocol {
   sealed trait AccountOperation
   sealed trait AccountCommand extends AccountOperation
-  case class CreditAccount(amount: Int) extends AccountCommand
+  case class Credit(amount: Int) extends AccountCommand
 
   sealed trait AccountQuery extends AccountOperation
   case class GetBalance(replyTo: ActorRef[BalanceResponse]) extends AccountQuery
@@ -30,7 +30,7 @@ case class Account(id: String) {
 
   private def handleCommand(state: AccountState, command: AccountCommand): Behavior[AccountOperation] =
     command match {
-      case CreditAccount(amount) => behavior(state.copy(balance = state.balance + amount))
+      case Credit(amount) => behavior(state.copy(balance = state.balance + amount))
     }
 
   private def handleQuery(state: AccountState, query: AccountQuery): Behavior[AccountOperation] =

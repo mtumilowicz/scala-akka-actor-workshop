@@ -6,8 +6,8 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{AccountCreditFailed, AccountToCredit, CreditAccountById}
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.{AccountToGetBalance, GetBalanceById}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccountFailed, CreditAccount}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import bank.BankProtocol._
 
@@ -33,18 +33,13 @@ object BankProtocol {
   object BankOperation {
     object AccountStateOperation {
       object AccountStateCommand {
-        case class CreditAccountById(id: String, amount: Int) extends AccountStateCommand
+        case class CreditAccount(account: Either[String, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
 
-        case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateCommand
-
-        case class AccountCreditFailed(reason: String) extends AccountStateCommand
+        case class CreditAccountFailed(reason: String) extends AccountStateCommand
       }
 
       object AccountStateQuery {
-        case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
-
-        case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
-
+        case class GetAccountBalance(account: Either[String, ActorRef[AccountOperation]], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
       }
 
     }
@@ -94,28 +89,28 @@ object Bank {
 
   private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreditAccountById(id, amount) =>
-        find(id, context, _.headOption.map(AccountToCredit(_, amount))
-          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+      case CreditAccount(Left(id), amount) =>
+        find(id, context, _.headOption.map(ref => CreditAccount(Right(ref), amount))
+          .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
 
         Behaviors.same
-      case AccountToCredit(account, amount) =>
-        account ! CreditAccount(amount)
+      case CreditAccount(Right(accountRef), amount) =>
+        accountRef ! Credit(amount)
         Behaviors.same
-      case AccountCreditFailed(reason) =>
+      case CreditAccountFailed(reason) =>
         println(reason)
         Behaviors.same
     }
 
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
-      case GetBalanceById(id, replyTo) =>
-        find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
-          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+      case GetAccountBalance(Left(id), replyTo) =>
+        find(id, context, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
+          .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
 
         Behaviors.same
-      case AccountToGetBalance(account, replyTo) =>
-        account ! GetBalance(replyTo)
+      case GetAccountBalance(Right(accountRef), replyTo) =>
+        accountRef ! GetBalance(replyTo)
         Behaviors.same
     }
 
@@ -145,10 +140,10 @@ object Main extends App {
 
   system ! CreateAccount("1")
   system ! CreateAccount("2")
-  system ! CreditAccountById("1", 100)
-  system ! CreditAccountById("2", 150)
-  system ! CreditAccountById("3", 99)
-  val result: Future[BalanceResponse] = system.ask(GetBalanceById("1", _))
+  system ! CreditAccount(Left("1"), 100)
+  system ! CreditAccount(Left("2"), 150)
+  system ! CreditAccount(Left("3"), 99)
+  val result: Future[BalanceResponse] = system.ask(GetAccountBalance(Left("1"), _))
 
   result.onComplete {
     case Failure(exception) => println(exception)
