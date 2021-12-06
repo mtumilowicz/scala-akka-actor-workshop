@@ -7,6 +7,7 @@ import bank.AccountProtocol._
 
 object AccountProtocol {
   sealed trait AccountOperation
+
   sealed trait AccountCommand extends AccountOperation
   case class Credit(amount: Int) extends AccountCommand
 
@@ -14,10 +15,11 @@ object AccountProtocol {
   case class GetBalance(replyTo: ActorRef[Balance]) extends AccountQuery
   case class Balance(id: AccountId, balance: Int)
 
-  case class AccountState(balance: Int)
 }
 
 case class Account(id: AccountId) {
+
+  private case class AccountState(balance: Int)
 
   val serviceKey: ServiceKey[AccountOperation] = ServiceKey[AccountOperation](id.raw)
 
