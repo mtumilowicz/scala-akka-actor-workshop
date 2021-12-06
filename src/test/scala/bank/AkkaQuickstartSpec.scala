@@ -3,7 +3,6 @@ package bank
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import bank.Bank.{CreateAccount, GetBalanceById}
-import com.example.Greeter.{Greet, Greeted}
 import org.scalatest.wordspec.AnyWordSpecLike
 
 //#definition
