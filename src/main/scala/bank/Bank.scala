@@ -20,15 +20,21 @@ object BankProtocol {
   sealed trait AccountStateOperation extends BankOperation
 
   sealed trait AccountStateCommand extends AccountStateOperation
+
   case class CreditAccountById(id: String, amount: Int) extends AccountStateCommand
+
   case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateCommand
+
   case class AccountCreditFailed(reason: String) extends AccountStateCommand
 
   sealed trait AccountStateQuery extends AccountStateOperation
+
   case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+
   case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
 
   sealed trait AccountsManagementOperation extends BankOperation
+
   sealed trait AccountsManagementCommand extends AccountsManagementOperation
 
   case class CreateAccount(id: String) extends AccountsManagementCommand
@@ -36,18 +42,22 @@ object BankProtocol {
 
 object Bank {
 
+  type Context = ActorContext[BankOperation]
+
   def apply(): Behavior[BankOperation] = Behaviors.receive { (context, message) =>
+    implicit val implicitContext: Context = context
     message match {
-      case operations: AccountStateOperation => accountStateOps(context)(operations)
-      case operations: AccountsManagementOperation => accountManagementOps(context)(operations)
+      case operations: AccountStateOperation => handleState(operations)
+      case operations: AccountsManagementOperation => handleManagement(operations)
     }
   }
 
-  private def accountManagementOps(context: ActorContext[BankOperation]): AccountsManagementOperation => Behavior[BankOperation] = {
-      case command: AccountsManagementCommand => handleAccountManagementCommand(command)(context)
-  }
+  private def handleManagement(operation: AccountsManagementOperation)(implicit context: Context): Behavior[BankOperation] =
+    operation match {
+      case command: AccountsManagementCommand => handleManagementCommand(command)
+    }
 
-  private def handleAccountManagementCommand(command: AccountsManagementCommand)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+  private def handleManagementCommand(command: AccountsManagementCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
       case CreateAccount(id) =>
         val account = Account(id)
@@ -55,14 +65,14 @@ object Bank {
         context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
         Behaviors.same
     }
-  }
 
-  private def accountStateOps(context: ActorContext[BankOperation]): AccountStateOperation => Behavior[BankOperation] = {
-    case command: AccountStateCommand => handleAccountStateCommand(command)(context)
-    case query: AccountStateQuery => handleAccountStateQuery(query)(context)
-  }
+  private def handleState(operation: AccountStateOperation)(implicit context: Context): Behavior[BankOperation] =
+    operation match {
+      case command: AccountStateCommand => handleStateCommand(command)
+      case query: AccountStateQuery => handleStateQuery(query)
+    }
 
-  private def handleAccountStateCommand(command: AccountStateCommand)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+  private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
       case CreditAccountById(id, amount) =>
         find(id, context, _.headOption.map(AccountToCredit(_, amount))
@@ -76,9 +86,8 @@ object Bank {
         println(reason)
         Behaviors.same
     }
-  }
 
-  private def handleAccountStateQuery(query: AccountStateQuery)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+  private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
       case GetBalanceById(id, replyTo) =>
         find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
@@ -89,9 +98,8 @@ object Bank {
         account ! GetBalance(replyTo)
         Behaviors.same
     }
-  }
 
-  private def find(id: String, context: ActorContext[BankOperation], f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
+  private def find(id: String, context: Context, f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
     val serviceKey = ServiceKey[AccountOperation](id)
