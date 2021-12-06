@@ -33,20 +33,20 @@ object BankProtocol {
   object BankOperation {
     object AccountStateOperation {
       object AccountStateCommand {
-        case class CreditAccount(account: Either[String, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
+        case class CreditAccount(account: Either[AccountId, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
 
         case class CreditAccountFailed(reason: String) extends AccountStateCommand
       }
 
       object AccountStateQuery {
-        case class GetAccountBalance(account: Either[String, ActorRef[AccountOperation]], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+        case class GetAccountBalance(account: Either[AccountId, ActorRef[AccountOperation]], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
       }
 
     }
 
     object AccountsManagementOperation {
       object AccountsManagementCommand {
-        case class CreateAccount(id: String) extends AccountsManagementCommand
+        case class CreateAccount(id: AccountId) extends AccountsManagementCommand
       }
 
     }
@@ -74,9 +74,9 @@ object Bank {
 
   private def handleManagementCommand(command: AccountsManagementCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreateAccount(id) =>
+      case CreateAccount(id @ AccountId(rawId)) =>
         val account = Account(id)
-        val accountRef = context.spawn(account.behavior(), s"Account-$id")
+        val accountRef = context.spawn(account.behavior(), s"Account-$rawId")
         context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
         Behaviors.same
     }
@@ -89,7 +89,7 @@ object Bank {
 
   private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreditAccount(Left(id), amount) =>
+      case CreditAccount(Left(AccountId(id)), amount) =>
         find(id, context, _.headOption.map(ref => CreditAccount(Right(ref), amount))
           .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
 
@@ -104,7 +104,7 @@ object Bank {
 
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
-      case GetAccountBalance(Left(id), replyTo) =>
+      case GetAccountBalance(Left(AccountId(id)), replyTo) =>
         find(id, context, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
           .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
 
@@ -138,12 +138,12 @@ object Main extends App {
     ActorSystem(Bank(), "bank")
   implicit val ec = system.executionContext
 
-  system ! CreateAccount("1")
-  system ! CreateAccount("2")
-  system ! CreditAccount(Left("1"), 100)
-  system ! CreditAccount(Left("2"), 150)
-  system ! CreditAccount(Left("3"), 99)
-  val result: Future[BalanceResponse] = system.ask(GetAccountBalance(Left("1"), _))
+  system ! CreateAccount(AccountId("1"))
+  system ! CreateAccount(AccountId("2"))
+  system ! CreditAccount(Left(AccountId("1")), 100)
+  system ! CreditAccount(Left(AccountId("2")), 150)
+  system ! CreditAccount(Left(AccountId("3")), 99)
+  val result: Future[BalanceResponse] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
 
   result.onComplete {
     case Failure(exception) => println(exception)

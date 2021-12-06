@@ -16,9 +16,9 @@ class AkkaQuickstartSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike 
     "reply to greeted" in {
       val replyProbe = createTestProbe[BalanceResponse]()
       val underTest = spawn(Bank())
-      underTest ! CreateAccount("1")
-      underTest ! GetAccountBalance(Left("1"), replyProbe.ref)
-      replyProbe.expectMessage(BalanceResponse("1", 0))
+      underTest ! CreateAccount(AccountId("1"))
+      underTest ! GetAccountBalance(Left(AccountId("1")), replyProbe.ref)
+      replyProbe.expectMessage(BalanceResponse(AccountId("1"), 0))
     }
     //#test
   }

@@ -12,14 +12,14 @@ object AccountProtocol {
 
   sealed trait AccountQuery extends AccountOperation
   case class GetBalance(replyTo: ActorRef[BalanceResponse]) extends AccountQuery
-  case class BalanceResponse(id: String, balance: Int)
+  case class BalanceResponse(id: AccountId, balance: Int)
 
   case class AccountState(balance: Int)
 }
 
-case class Account(id: String) {
+case class Account(id: AccountId) {
 
-  val serviceKey: ServiceKey[AccountOperation] = ServiceKey[AccountOperation](id)
+  val serviceKey: ServiceKey[AccountOperation] = ServiceKey[AccountOperation](id.raw)
 
   def behavior(): Behavior[AccountOperation] = behavior(AccountState(0))
 
