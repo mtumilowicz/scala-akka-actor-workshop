@@ -6,72 +6,83 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
-import bank.Bank.{BankOperations, CreateAccount, CreditAccountById, GetBalanceById, find}
+import bank.BankProtocol._
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
+object BankProtocol {
+
+  sealed trait BankOperation
+
+  sealed trait AccountStateOperation extends BankOperation
+
+  sealed trait AccountStateCommand extends AccountStateOperation
+  case class CreditAccountById(id: String, amount: Int) extends AccountStateCommand
+  case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateCommand
+  case class AccountCreditFailed(reason: String) extends AccountStateCommand
+
+  sealed trait AccountStateQuery extends AccountStateOperation
+  case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+  case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+
+  sealed trait AccountsManagementOperation extends BankOperation
+  sealed trait AccountsManagementCommand extends AccountsManagementOperation
+
+  case class CreateAccount(id: String) extends AccountsManagementCommand
+}
+
 object Bank {
 
-  sealed trait BankOperations
-
-  sealed trait AccountStateOperations extends BankOperations
-
-  case class CreditAccountById(id: String, amount: Int) extends AccountStateOperations
-  case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
-
-  sealed trait AccountsManagementOperations extends BankOperations
-
-  case class CreateAccount(id: String) extends AccountsManagementOperations
-
-  private case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateOperations
-  private case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
-
-  private case class AccountCreditFailed(reason: String) extends AccountStateOperations
-
-  def apply(): Behavior[BankOperations] = Behaviors.receive { (context, message) =>
+  def apply(): Behavior[BankOperation] = Behaviors.receive { (context, message) =>
     message match {
-      case operations: AccountStateOperations => accountStateOps(context)(operations)
-      case operations: AccountsManagementOperations => accountManagementOps(context)(operations)
+      case operations: AccountStateOperation => accountStateOps(context)(operations)
+      case operations: AccountsManagementOperation => accountManagementOps(context)(operations)
     }
   }
 
-  private def accountManagementOps(context: ActorContext[BankOperations]): AccountsManagementOperations => Behavior[BankOperations] = {
-      case CreateAccount(id) =>
-        val account = Account(id)
-        val accountRef = context.spawn(account.behavior(), s"Account-$id")
-        context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
-        Behaviors.same
+  private def accountManagementOps(context: ActorContext[BankOperation]): AccountsManagementOperation => Behavior[BankOperation] = {
+    case command: AccountsManagementCommand =>
+      command match {
+        case CreateAccount(id) =>
+          val account = Account(id)
+          val accountRef = context.spawn(account.behavior(), s"Account-$id")
+          context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
+          Behaviors.same
+      }
   }
 
-  private def accountStateOps(context: ActorContext[BankOperations]): AccountStateOperations => Behavior[BankOperations] = {
-    case AccountToCredit(account, amount) =>
-      account ! CreditAccount(amount)
-      Behaviors.same
-    case AccountToGetBalance(account, replyTo) =>
-      account ! GetBalance(replyTo)
-      Behaviors.same
-    case AccountCreditFailed(reason) =>
-      println(reason)
-      Behaviors.same
-    case operations: AccountStateOperations => operations match {
-      case CreditAccountById(id, amount) =>
+  private def accountStateOps(context: ActorContext[BankOperation]): AccountStateOperation => Behavior[BankOperation] = {
+    case command: AccountStateCommand =>
+      command match {
+        case CreditAccountById(id, amount) =>
+          find(id, context, _.headOption.map(AccountToCredit(_, amount))
+            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
 
-        find(id, context, _.headOption.map(AccountToCredit(_, amount))
-          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+          Behaviors.same
+        case AccountToCredit(account, amount) =>
+          account ! CreditAccount(amount)
+          Behaviors.same
+        case AccountCreditFailed(reason) =>
+          println(reason)
+          Behaviors.same
+      }
+    case query: AccountStateQuery =>
+      query match {
+        case GetBalanceById(id, replyTo) =>
+          find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
+            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
 
-        Behaviors.same
-      case GetBalanceById(id, replyTo) =>
-        find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
-          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
-
-        Behaviors.same
-    }
+          Behaviors.same
+        case AccountToGetBalance(account, replyTo) =>
+          account ! GetBalance(replyTo)
+          Behaviors.same
+      }
   }
 
-  def find(id: String, context: ActorContext[BankOperations], f: Set[ActorRef[AccountOperation]] => BankOperations): Unit = {
+  def find(id: String, context: ActorContext[BankOperation], f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
     val serviceKey = ServiceKey[AccountOperation](id)
@@ -91,7 +102,7 @@ object Bank {
 object Main extends App {
 
   implicit val timeout: Timeout = 3.seconds
-  implicit val system: ActorSystem[BankOperations] =
+  implicit val system: ActorSystem[BankOperation] =
     ActorSystem(Bank(), "bank")
   implicit val ec = system.executionContext
 
