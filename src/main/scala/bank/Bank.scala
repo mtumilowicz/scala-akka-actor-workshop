@@ -89,9 +89,9 @@ object Bank {
 
   private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreditAccount(Left(AccountId(id)), amount) =>
+      case CreditAccount(Left(id @ AccountId(rawId)), amount) =>
         find(id, context, _.headOption.map(ref => CreditAccount(Right(ref), amount))
-          .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
+          .getOrElse(CreditAccountFailed(s"account with id = $rawId does not exist")))
 
         Behaviors.same
       case CreditAccount(Right(accountRef), amount) =>
@@ -104,9 +104,9 @@ object Bank {
 
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
-      case GetAccountBalance(Left(AccountId(id)), replyTo) =>
+      case GetAccountBalance(Left(id @ AccountId(rawId)), replyTo) =>
         find(id, context, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
-          .getOrElse(CreditAccountFailed(s"account with id = $id does not exist")))
+          .getOrElse(CreditAccountFailed(s"account with id = $rawId does not exist")))
 
         Behaviors.same
       case GetAccountBalance(Right(accountRef), replyTo) =>
@@ -114,10 +114,10 @@ object Bank {
         Behaviors.same
     }
 
-  private def find(id: String, context: Context, f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
+  private def find(id: AccountId, context: Context, f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
-    val serviceKey = ServiceKey[AccountOperation](id)
+    val serviceKey = ServiceKey[AccountOperation](id.raw)
 
     context.ask(
       context.system.receptionist,
