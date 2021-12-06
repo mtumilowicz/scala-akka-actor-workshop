@@ -3,7 +3,8 @@ package bank
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import bank.AccountProtocol.BalanceResponse
-import bank.BankProtocol.{CreateAccount, GetBalanceById}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetBalanceById
+import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import org.scalatest.wordspec.AnyWordSpecLike
 
 //#definition

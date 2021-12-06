@@ -6,6 +6,9 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{AccountCreditFailed, AccountToCredit, CreditAccountById}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.{AccountToGetBalance, GetBalanceById}
+import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import bank.BankProtocol._
 
 import java.util.concurrent.TimeUnit
@@ -21,23 +24,40 @@ object BankProtocol {
 
   sealed trait AccountStateCommand extends AccountStateOperation
 
-  case class CreditAccountById(id: String, amount: Int) extends AccountStateCommand
-
-  case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateCommand
-
-  case class AccountCreditFailed(reason: String) extends AccountStateCommand
-
   sealed trait AccountStateQuery extends AccountStateOperation
-
-  case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
-
-  case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
 
   sealed trait AccountsManagementOperation extends BankOperation
 
   sealed trait AccountsManagementCommand extends AccountsManagementOperation
 
-  case class CreateAccount(id: String) extends AccountsManagementCommand
+  object BankOperation {
+    object AccountStateOperation {
+      object AccountStateCommand {
+        case class CreditAccountById(id: String, amount: Int) extends AccountStateCommand
+
+        case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateCommand
+
+        case class AccountCreditFailed(reason: String) extends AccountStateCommand
+      }
+
+      object AccountStateQuery {
+        case class GetBalanceById(id: String, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+
+        case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+
+      }
+
+    }
+
+    object AccountsManagementOperation {
+      object AccountsManagementCommand {
+        case class CreateAccount(id: String) extends AccountsManagementCommand
+      }
+
+    }
+
+  }
+
 }
 
 object Bank {
