@@ -9,7 +9,7 @@ import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.CreditAccount
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
-import bank.BankProtocol.BankOperation.BankError.CannotFindAccount
+import bank.BankProtocol.BankOperation.BankError.{CannotFindAccount, SelectorFailure, SelectorReturnManyAccounts}
 import bank.BankProtocol._
 
 import java.util.concurrent.TimeUnit
@@ -18,6 +18,8 @@ import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 object BankProtocol {
+
+  type AccountRepresentation = Either[AccountId, ActorRef[AccountOperation]]
 
   sealed trait BankOperation
 
@@ -36,27 +38,28 @@ object BankProtocol {
   object BankOperation {
     object BankError {
       case class CannotFindAccount(id: AccountId) extends BankError
+
+      case class SelectorReturnManyAccounts(id: ServiceKey[AccountOperation]) extends BankError
+
+      case class SelectorFailure(id: ServiceKey[AccountOperation], ex: Throwable) extends BankError
     }
+
     object AccountStateOperation {
       object AccountStateCommand {
-        case class CreditAccount(account: Either[AccountId, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
+        case class CreditAccount(account: AccountRepresentation, amount: Int) extends AccountStateCommand
       }
 
       object AccountStateQuery {
-        case class GetAccountBalance(account: Either[AccountId, ActorRef[AccountOperation]], replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+        case class GetAccountBalance(account: AccountRepresentation, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
       }
-
     }
 
     object AccountsManagementOperation {
       object AccountsManagementCommand {
         case class CreateAccount(id: AccountId) extends AccountsManagementCommand
       }
-
     }
-
   }
-
 }
 
 object Bank {
@@ -74,7 +77,13 @@ object Bank {
 
   private def handleError(error: BankError): Behavior[BankOperation] =
     error match {
-      case failure @ CannotFindAccount(id) =>
+      case failure@CannotFindAccount(_) =>
+        println(failure)
+        Behaviors.same
+      case failure@SelectorReturnManyAccounts(_) =>
+        println(failure)
+        Behaviors.same
+      case failure@SelectorFailure(_, _) =>
         println(failure)
         Behaviors.same
     }
@@ -86,7 +95,7 @@ object Bank {
 
   private def handleManagementCommand(command: AccountsManagementCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreateAccount(id @ AccountId(rawId)) =>
+      case CreateAccount(id@AccountId(rawId)) =>
         val account = Account(id)
         val accountRef = context.spawn(account.behavior(), s"Account-$rawId")
         context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
@@ -102,8 +111,7 @@ object Bank {
   private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
       case CreditAccount(Left(id), amount) =>
-        find(id, _.headOption.map(ref => CreditAccount(Right(ref), amount))
-          .getOrElse(CannotFindAccount(id)))
+        selectAccountAndFire(id, ref => CreditAccount(Right(ref), amount))
 
         Behaviors.same
       case CreditAccount(Right(accountRef), amount) =>
@@ -114,8 +122,7 @@ object Bank {
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
       case GetAccountBalance(Left(id), replyTo) =>
-        find(id, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
-          .getOrElse(CannotFindAccount(id)))
+        selectAccountAndFire(id, ref => GetAccountBalance(Right(ref), replyTo))
 
         Behaviors.same
       case GetAccountBalance(Right(accountRef), replyTo) =>
@@ -123,7 +130,7 @@ object Bank {
         Behaviors.same
     }
 
-  private def find(id: AccountId, f: Set[ActorRef[AccountOperation]] => BankOperation)(implicit context: Context): Unit = {
+  private def selectAccountAndFire(id: AccountId, mapping: ActorRef[AccountOperation] => BankOperation)(implicit context: Context): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
     val serviceKey = ServiceKey[AccountOperation](id.raw)
@@ -133,7 +140,14 @@ object Bank {
       Receptionist.Find(serviceKey)
     ) {
       case Success(listing) =>
-        f(listing.serviceInstances(serviceKey))
+        val instances = listing.serviceInstances(serviceKey)
+        instances.toList match {
+          case Nil => CannotFindAccount(id)
+          case head :: Nil => mapping(head)
+          case _ => SelectorReturnManyAccounts(serviceKey)
+        }
+      case Failure(exception) =>
+        SelectorFailure(serviceKey, exception)
     }
   }
 
