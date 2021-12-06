@@ -101,7 +101,7 @@ object Bank {
 
   private def handleStateCommand(command: AccountStateCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreditAccount(Left(id @ AccountId(rawId)), amount) =>
+      case CreditAccount(Left(id), amount) =>
         find(id, _.headOption.map(ref => CreditAccount(Right(ref), amount))
           .getOrElse(CannotFindAccount(id)))
 
@@ -113,7 +113,7 @@ object Bank {
 
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
     query match {
-      case GetAccountBalance(Left(id @ AccountId(rawId)), replyTo) =>
+      case GetAccountBalance(Left(id), replyTo) =>
         find(id, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
           .getOrElse(CannotFindAccount(id)))
 
