@@ -6,9 +6,10 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CannotFindAccount, CreditAccount}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.CreditAccount
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
+import bank.BankProtocol.BankOperation.BankError.CannotFindAccount
 import bank.BankProtocol._
 
 import java.util.concurrent.TimeUnit
@@ -19,6 +20,8 @@ import scala.util.{Failure, Success}
 object BankProtocol {
 
   sealed trait BankOperation
+
+  sealed trait BankError extends BankOperation
 
   sealed trait AccountStateOperation extends BankOperation
 
@@ -31,11 +34,12 @@ object BankProtocol {
   sealed trait AccountsManagementCommand extends AccountsManagementOperation
 
   object BankOperation {
+    object BankError {
+      case class CannotFindAccount(id: AccountId) extends BankError
+    }
     object AccountStateOperation {
       object AccountStateCommand {
         case class CreditAccount(account: Either[AccountId, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
-
-        case class CannotFindAccount(id: AccountId) extends AccountStateCommand
       }
 
       object AccountStateQuery {
@@ -62,10 +66,18 @@ object Bank {
   def apply(): Behavior[BankOperation] = Behaviors.receive { (context, message) =>
     implicit val implicitContext: Context = context
     message match {
-      case operations: AccountStateOperation => handleState(operations)
-      case operations: AccountsManagementOperation => handleManagement(operations)
+      case error: BankError => handleError(error)
+      case operation: AccountStateOperation => handleState(operation)
+      case operation: AccountsManagementOperation => handleManagement(operation)
     }
   }
+
+  private def handleError(error: BankError): Behavior[BankOperation] =
+    error match {
+      case failure @ CannotFindAccount(id) =>
+        println(failure)
+        Behaviors.same
+    }
 
   private def handleManagement(operation: AccountsManagementOperation)(implicit context: Context): Behavior[BankOperation] =
     operation match {
@@ -96,9 +108,6 @@ object Bank {
         Behaviors.same
       case CreditAccount(Right(accountRef), amount) =>
         accountRef ! Credit(amount)
-        Behaviors.same
-      case CannotFindAccount(reason) =>
-        println(reason)
         Behaviors.same
     }
 
