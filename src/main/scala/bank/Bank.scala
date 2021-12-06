@@ -6,7 +6,7 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccountFailed, CreditAccount}
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CannotFindAccount, CreditAccount}
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import bank.BankProtocol._
@@ -35,7 +35,7 @@ object BankProtocol {
       object AccountStateCommand {
         case class CreditAccount(account: Either[AccountId, ActorRef[AccountOperation]], amount: Int) extends AccountStateCommand
 
-        case class CreditAccountFailed(reason: String) extends AccountStateCommand
+        case class CannotFindAccount(id: AccountId) extends AccountStateCommand
       }
 
       object AccountStateQuery {
@@ -91,13 +91,13 @@ object Bank {
     command match {
       case CreditAccount(Left(id @ AccountId(rawId)), amount) =>
         find(id, _.headOption.map(ref => CreditAccount(Right(ref), amount))
-          .getOrElse(CreditAccountFailed(s"account with id = $rawId does not exist")))
+          .getOrElse(CannotFindAccount(id)))
 
         Behaviors.same
       case CreditAccount(Right(accountRef), amount) =>
         accountRef ! Credit(amount)
         Behaviors.same
-      case CreditAccountFailed(reason) =>
+      case CannotFindAccount(reason) =>
         println(reason)
         Behaviors.same
     }
@@ -106,7 +106,7 @@ object Bank {
     query match {
       case GetAccountBalance(Left(id @ AccountId(rawId)), replyTo) =>
         find(id, _.headOption.map(ref => GetAccountBalance(Right(ref), replyTo))
-          .getOrElse(CreditAccountFailed(s"account with id = $rawId does not exist")))
+          .getOrElse(CannotFindAccount(id)))
 
         Behaviors.same
       case GetAccountBalance(Right(accountRef), replyTo) =>
