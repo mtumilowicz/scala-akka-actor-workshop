@@ -5,7 +5,6 @@ import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
-import app.Progress.{result, system}
 import bank.Bank.{BankOperations, CreateAccount, CreditAccountById, GetBalanceById, find}
 
 import java.util.concurrent.TimeUnit
