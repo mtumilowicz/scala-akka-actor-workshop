@@ -44,45 +44,54 @@ object Bank {
   }
 
   private def accountManagementOps(context: ActorContext[BankOperation]): AccountsManagementOperation => Behavior[BankOperation] = {
-    case command: AccountsManagementCommand =>
-      command match {
-        case CreateAccount(id) =>
-          val account = Account(id)
-          val accountRef = context.spawn(account.behavior(), s"Account-$id")
-          context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
-          Behaviors.same
-      }
+      case command: AccountsManagementCommand => handleAccountManagementCommand(command)(context)
+  }
+
+  private def handleAccountManagementCommand(command: AccountsManagementCommand)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+    command match {
+      case CreateAccount(id) =>
+        val account = Account(id)
+        val accountRef = context.spawn(account.behavior(), s"Account-$id")
+        context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
+        Behaviors.same
+    }
   }
 
   private def accountStateOps(context: ActorContext[BankOperation]): AccountStateOperation => Behavior[BankOperation] = {
-    case command: AccountStateCommand =>
-      command match {
-        case CreditAccountById(id, amount) =>
-          find(id, context, _.headOption.map(AccountToCredit(_, amount))
-            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
-
-          Behaviors.same
-        case AccountToCredit(account, amount) =>
-          account ! CreditAccount(amount)
-          Behaviors.same
-        case AccountCreditFailed(reason) =>
-          println(reason)
-          Behaviors.same
-      }
-    case query: AccountStateQuery =>
-      query match {
-        case GetBalanceById(id, replyTo) =>
-          find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
-            .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
-
-          Behaviors.same
-        case AccountToGetBalance(account, replyTo) =>
-          account ! GetBalance(replyTo)
-          Behaviors.same
-      }
+    case command: AccountStateCommand => handleAccountStateCommand(command)(context)
+    case query: AccountStateQuery => handleAccountStateQuery(query)(context)
   }
 
-  def find(id: String, context: ActorContext[BankOperation], f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
+  private def handleAccountStateCommand(command: AccountStateCommand)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+    command match {
+      case CreditAccountById(id, amount) =>
+        find(id, context, _.headOption.map(AccountToCredit(_, amount))
+          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+
+        Behaviors.same
+      case AccountToCredit(account, amount) =>
+        account ! CreditAccount(amount)
+        Behaviors.same
+      case AccountCreditFailed(reason) =>
+        println(reason)
+        Behaviors.same
+    }
+  }
+
+  private def handleAccountStateQuery(query: AccountStateQuery)(context: ActorContext[BankOperation]): Behavior[BankOperation] = {
+    query match {
+      case GetBalanceById(id, replyTo) =>
+        find(id, context, _.headOption.map(AccountToGetBalance(_, replyTo))
+          .getOrElse(AccountCreditFailed(s"account with id = $id does not exist")))
+
+        Behaviors.same
+      case AccountToGetBalance(account, replyTo) =>
+        account ! GetBalance(replyTo)
+        Behaviors.same
+    }
+  }
+
+  private def find(id: String, context: ActorContext[BankOperation], f: Set[ActorRef[AccountOperation]] => BankOperation): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
     val serviceKey = ServiceKey[AccountOperation](id)
