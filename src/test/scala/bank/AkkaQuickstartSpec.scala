@@ -2,6 +2,7 @@
 package bank
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import bank.AccountProtocol.BalanceResponse
 import bank.Bank.{CreateAccount, GetBalanceById}
 import org.scalatest.wordspec.AnyWordSpecLike
 

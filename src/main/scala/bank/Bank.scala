@@ -5,34 +5,13 @@ import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
+import bank.AccountProtocol._
 import bank.Bank.{BankOperations, CreateAccount, CreditAccountById, GetBalanceById, find}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
-
-sealed trait AccountOperations
-
-case class CreditAccount(amount: Int) extends AccountOperations
-case class GetBalance(replyTo: ActorRef[BalanceResponse]) extends AccountOperations
-case class BalanceResponse(id: String, balance: Int)
-
-case class Account(id: String) {
-
-  val serviceKey: ServiceKey[AccountOperations] = ServiceKey[AccountOperations](id)
-
-  def behavior(): Behavior[AccountOperations] = behavior(0)
-
-  def behavior(balance: Int): Behavior[AccountOperations] = Behaviors.receiveMessage {
-    case CreditAccount(amount) =>
-      println(s"Account with id = $id was credited with $amount")
-      behavior(balance + amount)
-    case GetBalance(replyTo) =>
-      replyTo ! BalanceResponse(id, balance)
-      Behaviors.same
-  }
-}
 
 object Bank {
 
@@ -47,8 +26,8 @@ object Bank {
 
   case class CreateAccount(id: String) extends AccountsManagementOperations
 
-  private case class AccountToCredit(account: ActorRef[AccountOperations], amount: Int) extends AccountStateOperations
-  private case class AccountToGetBalance(account: ActorRef[AccountOperations], replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
+  private case class AccountToCredit(account: ActorRef[AccountOperation], amount: Int) extends AccountStateOperations
+  private case class AccountToGetBalance(account: ActorRef[AccountOperation], replyTo: ActorRef[BalanceResponse]) extends AccountStateOperations
 
   private case class AccountCreditFailed(reason: String) extends AccountStateOperations
 
@@ -92,10 +71,10 @@ object Bank {
     }
   }
 
-  def find(id: String, context: ActorContext[BankOperations], f: Set[ActorRef[AccountOperations]] => BankOperations): Unit = {
+  def find(id: String, context: ActorContext[BankOperations], f: Set[ActorRef[AccountOperation]] => BankOperations): Unit = {
     implicit val timeout: Timeout = Timeout.apply(100, TimeUnit.MILLISECONDS)
 
-    val serviceKey = ServiceKey[AccountOperations](id)
+    val serviceKey = ServiceKey[AccountOperation](id)
 
     context.ask(
       context.system.receptionist,
