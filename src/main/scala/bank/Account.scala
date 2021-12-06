@@ -11,8 +11,8 @@ object AccountProtocol {
   case class Credit(amount: Int) extends AccountCommand
 
   sealed trait AccountQuery extends AccountOperation
-  case class GetBalance(replyTo: ActorRef[BalanceResponse]) extends AccountQuery
-  case class BalanceResponse(id: AccountId, balance: Int)
+  case class GetBalance(replyTo: ActorRef[Balance]) extends AccountQuery
+  case class Balance(id: AccountId, balance: Int)
 
   case class AccountState(balance: Int)
 }
@@ -36,7 +36,7 @@ case class Account(id: AccountId) {
   private def handleQuery(state: AccountState, query: AccountQuery): Behavior[AccountOperation] =
     query match {
       case GetBalance(replyTo) =>
-        replyTo ! BalanceResponse(id, state.balance)
+        replyTo ! Balance(id, state.balance)
         Behaviors.same
     }
 

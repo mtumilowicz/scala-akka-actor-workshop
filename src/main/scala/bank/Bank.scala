@@ -50,7 +50,7 @@ object BankProtocol {
       }
 
       object AccountStateQuery {
-        case class GetAccountBalance(account: AccountRepresentation, replyTo: ActorRef[BalanceResponse]) extends AccountStateQuery
+        case class GetAccountBalance(account: AccountRepresentation, replyTo: ActorRef[Balance]) extends AccountStateQuery
       }
     }
 
@@ -166,7 +166,7 @@ object Main extends App {
   system ! CreditAccount(Left(AccountId("1")), 100)
   system ! CreditAccount(Left(AccountId("2")), 150)
   system ! CreditAccount(Left(AccountId("3")), 99)
-  val result: Future[BalanceResponse] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
+  val result: Future[Balance] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
 
   result.onComplete {
     case Failure(exception) => println(exception)
