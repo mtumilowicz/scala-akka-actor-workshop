@@ -45,7 +45,10 @@ object BankProtocol {
       object AccountStateCommand {
         case class CreditAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
 
-        case class DebitAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
+        case class DebitAccount(account: AccountRepresentation,
+                                amount: NonNegativeInt,
+                                replyTo: ActorRef[Either[InsufficientFundsForDebit, Debited]]
+                               ) extends AccountStateCommand
       }
 
       object AccountStateQuery {
@@ -125,12 +128,12 @@ object Bank {
       case CreditAccount(Right(accountRef), amount) =>
         accountRef ! Credit(amount)
         Behaviors.same
-      case DebitAccount(Left(id), amount) =>
-        selectAccountAndFire(id, ref => DebitAccount(Right(ref), amount))
+      case DebitAccount(Left(id), amount, replyTo) =>
+        selectAccountAndFire(id, ref => DebitAccount(Right(ref), amount, replyTo))
 
         Behaviors.same
-      case DebitAccount(Right(accountRef), amount) =>
-        accountRef ! Debit(amount)
+      case DebitAccount(Right(accountRef), amount, replyTo) =>
+        accountRef ! Debit(amount, replyTo)
         Behaviors.same
     }
 

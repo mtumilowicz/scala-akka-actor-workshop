@@ -8,4 +8,7 @@ case class NonNegativeInt(raw: Int) {
 
   def -(other: NonNegativeInt): NonNegativeInt =
     NonNegativeInt(raw - other.raw)
+
+  def <(other: NonNegativeInt): Boolean =
+    raw < other.raw
 }

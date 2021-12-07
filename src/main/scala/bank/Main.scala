@@ -25,7 +25,7 @@ object Main extends App {
   system ! CreditAccount(Left(AccountId("1")), NonNegativeInt(100))
   system ! CreditAccount(Left(AccountId("2")), NonNegativeInt(150))
   system ! CreditAccount(Left(AccountId("3")), NonNegativeInt(99))
-  system ! DebitAccount(Left(AccountId("1")), NonNegativeInt(99))
+  system.ask(DebitAccount(Left(AccountId("1")), NonNegativeInt(99), _))
   val result: Future[Balance] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
 
   result.onComplete {

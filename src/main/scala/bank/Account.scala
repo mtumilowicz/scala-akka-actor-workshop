@@ -10,7 +10,9 @@ object AccountProtocol {
 
   sealed trait AccountCommand extends AccountOperation
   case class Credit(amount: NonNegativeInt) extends AccountCommand
-  case class Debit(amount: NonNegativeInt) extends AccountCommand
+  case class Debit(amount: NonNegativeInt, replyTo: ActorRef[Either[InsufficientFundsForDebit, Debited]]) extends AccountCommand
+  case class Debited(id: AccountId, amount: NonNegativeInt)
+  case class InsufficientFundsForDebit(id: AccountId, balance: NonNegativeInt)
 
   sealed trait AccountQuery extends AccountOperation
   case class GetBalance(replyTo: ActorRef[Balance]) extends AccountQuery
@@ -34,7 +36,14 @@ case class Account(id: AccountId) {
   private def handleCommand(state: AccountState, command: AccountCommand): Behavior[AccountOperation] =
     command match {
       case Credit(amount) => behavior(state.copy(balance = state.balance + amount))
-      case Debit(amount) => behavior(state.copy(balance = state.balance - amount))
+      case Debit(amount, replyTo) =>
+        if (state.balance < amount) {
+          replyTo ! Left(InsufficientFundsForDebit(id, state.balance))
+          Behaviors.same
+        } else {
+          replyTo ! Right(Debited(id = id, amount = amount))
+          behavior(state.copy(balance = state.balance - amount))
+        }
     }
 
   private def handleQuery(state: AccountState, query: AccountQuery): Behavior[AccountOperation] =
