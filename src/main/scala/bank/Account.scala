@@ -41,11 +41,11 @@ case class Account(id: AccountId) {
 
   private def handleDebit(debit: Debit)(implicit state: AccountState): Behavior[AccountOperation] = {
     val Debit(amount, replyTo) = debit
-    if (amount.raw > 1_000_000) throw new RuntimeException("You are a big spender, try to spend less!")
     if (state.balance < amount) {
       replyTo ! Left(InsufficientFundsForDebit(id, state.balance))
       Behaviors.same
     } else {
+      if (amount.raw > 1_000_000) throw new RuntimeException("You are a big spender, try to spend less!")
       replyTo ! Right(Debited(id = id, amount = amount))
       behavior(state.copy(balance = state.balance - amount))
     }

@@ -3,7 +3,6 @@ package bank
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
-import akka.event.Logging
 import akka.util.Timeout
 import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
@@ -61,7 +60,7 @@ object BankProtocol {
       object AccountsManagementCommand {
         case class CreateAccount(id: AccountId, replyTo: ActorRef[Either[CreatingAccountFailed, AccountCreated]]) extends AccountsManagementCommand
         case class AccountCreated(id: AccountId)
-        case class CreatingAccountFailed(reason: String)
+        case class CreatingAccountFailed(id: AccountId, reason: String)
       }
     }
   }
@@ -114,7 +113,7 @@ object Bank {
           Behaviors.same
         } catch {
           case ex: Throwable =>
-            replyTo ! Left(CreatingAccountFailed(ex.getMessage))
+            replyTo ! Left(CreatingAccountFailed(id, ex.getMessage))
             Behaviors.same
         }
     }
