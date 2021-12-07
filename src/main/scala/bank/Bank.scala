@@ -1,9 +1,8 @@
 package bank
 
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
-import akka.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.actor.typed.{ActorRef, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
@@ -13,8 +12,6 @@ import bank.BankProtocol.BankOperation.BankError.{CannotFindAccount, SelectorFai
 import bank.BankProtocol._
 
 import java.util.concurrent.TimeUnit
-import scala.concurrent.Future
-import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 object BankProtocol {
@@ -158,29 +155,4 @@ object Bank {
         SelectorFailure(serviceKey, exception)
     }
   }
-
-
-}
-
-object Main extends App {
-
-  implicit val timeout: Timeout = 3.seconds
-  implicit val system: ActorSystem[BankOperation] =
-    ActorSystem(Bank(), "bank")
-  implicit val ec = system.executionContext
-
-  system ! CreateAccount(AccountId("1"))
-  system ! CreateAccount(AccountId("2"))
-  system ! CreditAccount(Left(AccountId("1")), NonNegativeInt(100))
-  system ! CreditAccount(Left(AccountId("2")), NonNegativeInt(150))
-  system ! CreditAccount(Left(AccountId("3")), NonNegativeInt(99))
-  system ! DebitAccount(Left(AccountId("1")), NonNegativeInt(99))
-  val result: Future[Balance] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
-
-  result.onComplete {
-    case Failure(exception) => println(exception)
-    case Success(value) => println(value)
-  }
-
-  system.terminate()
 }
