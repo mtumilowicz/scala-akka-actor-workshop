@@ -7,7 +7,7 @@ import akka.util.Timeout
 import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
-import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
+import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.{AccountCreated, CreateAccount, CreatingAccountFailed}
 import bank.BankProtocol.BankOperation.BankError.{CannotFindAccount, SelectorFailure, SelectorReturnManyAccounts}
 import bank.BankProtocol._
 
@@ -44,6 +44,7 @@ object BankProtocol {
     object AccountStateOperation {
       object AccountStateCommand {
         case class CreditAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
+
         case class DebitAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
       }
 
@@ -54,7 +55,9 @@ object BankProtocol {
 
     object AccountsManagementOperation {
       object AccountsManagementCommand {
-        case class CreateAccount(id: AccountId) extends AccountsManagementCommand
+        case class CreateAccount(id: AccountId, replyTo: ActorRef[Either[CreatingAccountFailed, AccountCreated]]) extends AccountsManagementCommand
+        case class AccountCreated(id: AccountId)
+        case class CreatingAccountFailed(reason: String)
       }
     }
   }
@@ -93,11 +96,18 @@ object Bank {
 
   private def handleManagementCommand(command: AccountsManagementCommand)(implicit context: Context): Behavior[BankOperation] =
     command match {
-      case CreateAccount(id@AccountId(rawId)) =>
+      case CreateAccount(id@AccountId(rawId), replyTo) =>
         val account = Account(id)
-        val accountRef = context.spawn(account.behavior(), s"Account-$rawId")
-        context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
-        Behaviors.same
+        try {
+          val accountRef = context.spawn(account.behavior(), s"Account-$rawId")
+          context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
+          replyTo ! Right(AccountCreated(id))
+          Behaviors.same
+        } catch {
+          case ex: Throwable =>
+            replyTo ! Left(CreatingAccountFailed(ex.getMessage))
+            Behaviors.same
+        }
     }
 
   private def handleState(operation: AccountStateOperation)(implicit context: Context): Behavior[BankOperation] =

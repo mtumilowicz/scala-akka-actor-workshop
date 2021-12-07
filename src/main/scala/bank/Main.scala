@@ -20,8 +20,8 @@ object Main extends App {
     ActorSystem(Bank(), "bank")
   implicit val ec = system.executionContext
 
-  system ! CreateAccount(AccountId("1"))
-  system ! CreateAccount(AccountId("2"))
+  system.ask(CreateAccount(AccountId("1"), _))
+  system.ask(CreateAccount(AccountId("2"), _))
   system ! CreditAccount(Left(AccountId("1")), NonNegativeInt(100))
   system ! CreditAccount(Left(AccountId("2")), NonNegativeInt(150))
   system ! CreditAccount(Left(AccountId("3")), NonNegativeInt(99))
