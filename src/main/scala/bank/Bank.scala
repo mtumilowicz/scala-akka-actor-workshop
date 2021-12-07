@@ -3,6 +3,7 @@ package bank
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
+import akka.event.Logging
 import akka.util.Timeout
 import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
@@ -70,6 +71,7 @@ object Bank {
 
   type Context = ActorContext[BankOperation]
 
+
   def apply(): Behavior[BankOperation] = Behaviors.receive { (context, message) =>
     implicit val implicitContext: Context = context
     message match {
@@ -79,16 +81,16 @@ object Bank {
     }
   }
 
-  private def handleError(error: BankError): Behavior[BankOperation] =
+  private def handleError(error: BankError)(implicit context: Context): Behavior[BankOperation] =
     error match {
       case failure@CannotFindAccount(_) =>
-        println(failure)
+        context.log.info("Received message: {}", failure)
         Behaviors.same
       case failure@SelectorReturnManyAccounts(_) =>
-        println(failure)
+        context.log.info("Received message: {}", failure)
         Behaviors.same
       case failure@SelectorFailure(_, _) =>
-        println(failure)
+        context.log.info("Received message: {}", failure)
         Behaviors.same
     }
 
