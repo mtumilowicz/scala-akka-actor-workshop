@@ -2,7 +2,7 @@ package bank
 
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import akka.util.Timeout
 import bank.AccountProtocol._
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
@@ -102,7 +102,11 @@ object Bank {
       case CreateAccount(id@AccountId(rawId), replyTo) =>
         val account = Account(id)
         try {
-          val accountRef = context.spawn(account.behavior(), s"Account-$rawId")
+          val accountRef = context.spawn(
+            Behaviors.supervise(account.behavior())
+              .onFailure[RuntimeException](SupervisorStrategy.resume),
+            s"Account-$rawId"
+          )
           context.system.receptionist ! Receptionist.Register(account.serviceKey, accountRef)
           replyTo ! Right(AccountCreated(id))
           Behaviors.same

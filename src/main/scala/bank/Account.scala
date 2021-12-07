@@ -28,25 +28,30 @@ case class Account(id: AccountId) {
 
   def behavior(): Behavior[AccountOperation] = behavior(AccountState(NonNegativeInt(0)))
 
-  private def behavior(state: AccountState): Behavior[AccountOperation] = Behaviors.receiveMessage {
-    case command: AccountCommand => handleCommand(state, command)
-    case query: AccountQuery => handleQuery(state, query)
+  private def behavior(implicit state: AccountState): Behavior[AccountOperation] = Behaviors.receiveMessage {
+    case command: AccountCommand => handleCommand(command)
+    case query: AccountQuery => handleQuery(query)
   }
 
-  private def handleCommand(state: AccountState, command: AccountCommand): Behavior[AccountOperation] =
+  private def handleCommand(command: AccountCommand)(implicit state: AccountState): Behavior[AccountOperation] =
     command match {
       case Credit(amount) => behavior(state.copy(balance = state.balance + amount))
-      case Debit(amount, replyTo) =>
-        if (state.balance < amount) {
-          replyTo ! Left(InsufficientFundsForDebit(id, state.balance))
-          Behaviors.same
-        } else {
-          replyTo ! Right(Debited(id = id, amount = amount))
-          behavior(state.copy(balance = state.balance - amount))
-        }
+      case debit@Debit(_, _) => handleDebit(debit)
     }
 
-  private def handleQuery(state: AccountState, query: AccountQuery): Behavior[AccountOperation] =
+  private def handleDebit(debit: Debit)(implicit state: AccountState): Behavior[AccountOperation] = {
+    val Debit(amount, replyTo) = debit
+    if (amount.raw > 1_000_000) throw new RuntimeException("You are a big spender, try to spend less!")
+    if (state.balance < amount) {
+      replyTo ! Left(InsufficientFundsForDebit(id, state.balance))
+      Behaviors.same
+    } else {
+      replyTo ! Right(Debited(id = id, amount = amount))
+      behavior(state.copy(balance = state.balance - amount))
+    }
+  }
+
+  private def handleQuery(query: AccountQuery)(implicit state: AccountState): Behavior[AccountOperation] =
     query match {
       case GetBalance(replyTo) =>
         replyTo ! Balance(id, state.balance)
