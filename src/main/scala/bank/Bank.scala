@@ -46,8 +46,8 @@ object BankProtocol {
 
     object AccountStateOperation {
       object AccountStateCommand {
-        case class CreditAccount(account: AccountRepresentation, amount: Int) extends AccountStateCommand
-        case class DebitAccount(account: AccountRepresentation, amount: Int) extends AccountStateCommand
+        case class CreditAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
+        case class DebitAccount(account: AccountRepresentation, amount: NonNegativeInt) extends AccountStateCommand
       }
 
       object AccountStateQuery {
@@ -171,10 +171,10 @@ object Main extends App {
 
   system ! CreateAccount(AccountId("1"))
   system ! CreateAccount(AccountId("2"))
-  system ! CreditAccount(Left(AccountId("1")), 100)
-  system ! CreditAccount(Left(AccountId("2")), 150)
-  system ! CreditAccount(Left(AccountId("3")), 99)
-  system ! DebitAccount(Left(AccountId("1")), 99)
+  system ! CreditAccount(Left(AccountId("1")), NonNegativeInt(100))
+  system ! CreditAccount(Left(AccountId("2")), NonNegativeInt(150))
+  system ! CreditAccount(Left(AccountId("3")), NonNegativeInt(99))
+  system ! DebitAccount(Left(AccountId("1")), NonNegativeInt(99))
   val result: Future[Balance] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
 
   result.onComplete {

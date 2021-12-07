@@ -9,22 +9,22 @@ object AccountProtocol {
   sealed trait AccountOperation
 
   sealed trait AccountCommand extends AccountOperation
-  case class Credit(amount: Int) extends AccountCommand
-  case class Debit(amount: Int) extends AccountCommand
+  case class Credit(amount: NonNegativeInt) extends AccountCommand
+  case class Debit(amount: NonNegativeInt) extends AccountCommand
 
   sealed trait AccountQuery extends AccountOperation
   case class GetBalance(replyTo: ActorRef[Balance]) extends AccountQuery
-  case class Balance(id: AccountId, balance: Int)
+  case class Balance(id: AccountId, balance: NonNegativeInt)
 
 }
 
 case class Account(id: AccountId) {
 
-  private case class AccountState(balance: Int)
+  private case class AccountState(balance: NonNegativeInt)
 
   val serviceKey: ServiceKey[AccountOperation] = ServiceKey[AccountOperation](id.raw)
 
-  def behavior(): Behavior[AccountOperation] = behavior(AccountState(0))
+  def behavior(): Behavior[AccountOperation] = behavior(AccountState(NonNegativeInt(0)))
 
   private def behavior(state: AccountState): Behavior[AccountOperation] = Behaviors.receiveMessage {
     case command: AccountCommand => handleCommand(state, command)

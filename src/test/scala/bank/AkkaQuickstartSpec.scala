@@ -18,7 +18,7 @@ class AkkaQuickstartSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike 
       val underTest = spawn(Bank())
       underTest ! CreateAccount(AccountId("1"))
       underTest ! GetAccountBalance(Left(AccountId("1")), replyProbe.ref)
-      replyProbe.expectMessage(Balance(AccountId("1"), 0))
+      replyProbe.expectMessage(Balance(AccountId("1"), NonNegativeInt(0)))
     }
     //#test
   }
