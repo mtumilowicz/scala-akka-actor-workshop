@@ -6,7 +6,7 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.util.Timeout
 import bank.AccountProtocol._
-import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.CreditAccount
+import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateCommand.{CreditAccount, DebitAccount}
 import bank.BankProtocol.BankOperation.AccountStateOperation.AccountStateQuery.GetAccountBalance
 import bank.BankProtocol.BankOperation.AccountsManagementOperation.AccountsManagementCommand.CreateAccount
 import bank.BankProtocol.BankOperation.BankError.{CannotFindAccount, SelectorFailure, SelectorReturnManyAccounts}
@@ -47,6 +47,7 @@ object BankProtocol {
     object AccountStateOperation {
       object AccountStateCommand {
         case class CreditAccount(account: AccountRepresentation, amount: Int) extends AccountStateCommand
+        case class DebitAccount(account: AccountRepresentation, amount: Int) extends AccountStateCommand
       }
 
       object AccountStateQuery {
@@ -117,6 +118,13 @@ object Bank {
       case CreditAccount(Right(accountRef), amount) =>
         accountRef ! Credit(amount)
         Behaviors.same
+      case DebitAccount(Left(id), amount) =>
+        selectAccountAndFire(id, ref => DebitAccount(Right(ref), amount))
+
+        Behaviors.same
+      case DebitAccount(Right(accountRef), amount) =>
+        accountRef ! Debit(amount)
+        Behaviors.same
     }
 
   private def handleStateQuery(query: AccountStateQuery)(implicit context: Context): Behavior[BankOperation] =
@@ -166,6 +174,7 @@ object Main extends App {
   system ! CreditAccount(Left(AccountId("1")), 100)
   system ! CreditAccount(Left(AccountId("2")), 150)
   system ! CreditAccount(Left(AccountId("3")), 99)
+  system ! DebitAccount(Left(AccountId("1")), 99)
   val result: Future[Balance] = system.ask(GetAccountBalance(Left(AccountId("1")), _))
 
   result.onComplete {
