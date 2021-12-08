@@ -1,18 +1,29 @@
 # scala-akka-actor-workshop
-* referneces
+* references
   * https://blog.rockthejvm.com/stateful-stateless-actors/
   * https://www.baeldung.com/scala/typed-akka
   * https://github.com/Baeldung/scala-tutorials/tree/master/scala-akka/src/main/scala/com/baeldung/scala/akka/typed
-  * https://doc.akka.io/docs/akka/current/typed/interaction-patterns.html
-  * https://doc.akka.io/docs/akka/2.5.32/typed-actors.html
   * https://stackoverflow.com/questions/23908132/using-future-callback-inside-akka-actor
   * https://www.baeldung.com/scala/discovering-actors-in-akka
   * https://github.com/Baeldung/scala-tutorials/tree/master/scala-akka
   * [Farewell Any - Unit, welcome Akka Typed! by Heiko Seeberger](https://www.youtube.com/watch?v=YW2wiBERKH8)
   * https://heikoseeberger.rocks/2017/10/02/2017-10-02-actor-model/
   * https://github.com/hseeberger/welcome-akka-typed
+  * [Networks and Types — the Future of Akka by Konrad ‘ktoso’ Malawski](https://www.youtube.com/watch?v=Qb9Cnii-34c)
+  * https://stackoverflow.com/questions/64805718/in-akka-actor-typed-what-is-the-difference-between-behaviors-setup-and-behavior
+  * [Scala Swarm 2017 | Konrad Malawski: Though this be madness yet there's method in't (keynote)](https://www.youtube.com/watch?v=G1V0Mg0j6-M)
+  * [Farewell Any - Unit, welcome Akka Typed! by Heiko Seeberger](https://www.youtube.com/watch?v=YW2wiBERKH8)
+  * [8 Akka anti-patterns you'd better be aware of by Manuel Bernhardt](https://www.youtube.com/watch?v=hr3UdktX-As)
+  * https://doc.akka.io/docs/akka/2.5/typed/index.html
 
-
+* antipattern
+    * closing over mutable state in asynchronous calls
+      * instead use queries for state inquiries (using the ask pattern)
+    * if your actor system has no hierarchy you are missing the point
+      * actor systems are designed to handle failures through hierarchy
+    * supervision too often misunderstood / abused
+      * use: try object, try-catch; supervision is for when things are going really bad
+      like exploding - try restarting
 * may be worthwhile to first look on the previous workshops
     * scala basics: https://github.com/mtumilowicz/scala213-functional-programming-collections-workshop
     * actors basics: https://github.com/mtumilowicz/kotlin-functional-programming-actors-workshop
@@ -226,3 +237,75 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
   def receiveSignal(ctx: ActorContext[T], msg: Signal): Behavior[T]
 }
 * receiveSignal takes care of a few special messages like PreRestart or Terminated which of course are not covered by the message type T
+* behaviors always return new behaviors (state machine for the win)
+  * everything is now finite state machine
+* akka.actor.typed.scaladsl.Behaviors.setup vs akka.actor.typed.scaladsl.Behaviors.receive
+  * Behaviors.setup defines behavior that does not wait to receive a message before executing. It simply executes its body immediately after an actor is spawned from it.
+    * You must return a Behavior[T] from it, which might be a message-handling behavior. To do this, you would likely use Behaviors.receive or Behaviors.receiveMessage. (Or else Behaviors.stopped, if the actor is only required to do its work once once, and then disappear.)
+    * Because it executes without waiting, Behaviors.setup is often used to define the behavior for the first actor in your system
+      * Its initial behavior will likely be responsible for spawning the next brood of actors that your program will need, before adopting a new, message-handling behavior.
+  * Behaviors.receive defines message-handling behavior.
+    * You pass it a function that has parameters for both the actor context, and an argument containing the message
+    * Actors created from this behavior will do nothing until they receive a message of a type that this behavior can handle.
+* you don't have access to the actor state because ActorRef has no notion about internal state
+  * test: behavior and interactions
+
+
+* In summary, this is what happens when an actor receives a message:
+
+  The actor adds the message to the end of a queue.
+  If the actor was not scheduled for execution, it is marked as ready to execute.
+  A (hidden) scheduler entity takes the actor and starts executing it.
+  Actor picks the message from the front of the queue.
+  Actor modifies internal state, sends messages to other actors.
+  The actor is unscheduled.
+* all actors have a common parent, the user guardian, which is defined and created when you start the ActorSystem
+* creation of an actor returns a reference that is a valid URL. So, for example, if we create an actor named someActor from the user guardian with context.spawn(someBehavior, "someActor"), its reference will include the path /user/someActor
+    * The easiest way to see the actor hierarchy in action is to print ActorRef instances
+* In fact, before you create an actor in your code, Akka has already created three actors in the system.
+    * / the so-called root guardian. This is the parent of all actors in the system, and the last one to stop when the system itself is terminated.
+    * /user the guardian. This is the parent actor for all user created actors. Don’t let the name user confuse you, it has nothing to do with end users, nor with user handling. Every actor you create using the Akka library will have the constant path /user/ prepended to it.
+    * /system the system guardian. Akka or other libraries built on top of Akka may create actors in the system namespace.
+
+* The actor lifecycle
+    * Whenever an actor is stopped, all of its children are recursively stopped too
+    * To stop an actor, the recommended pattern is to return Behaviors.stopped()
+    * The Akka actor API exposes some lifecycle signals, for example PostStop is sent just before the actor stops
+
+* Failure handling
+    * Whenever an actor fails (throws an exception or an unhandled exception bubbles out from onMessage) the failure information is propagated to the supervision strategy, which then decides how to handle the exception caused by the actor.
+    * The supervision strategy is typically defined by the parent actor when it spawns a child actor. In this way, parents act as supervisors for their children.
+    * The default supervisor strategy is to stop the child
+
+* In the world of actors, protocols take the place of interfaces
+* Akka provides the following behavior for message sends:
+
+  At-most-once delivery, that is, no guaranteed delivery.
+  Message ordering is maintained per sender, receiver pair.
+* The delivery semantics provided by messaging subsystems typically fall into the following categories:
+
+  At-most-once delivery — each message is delivered zero or one time; in more causal terms it means that messages can be lost, but are never duplicated.
+  At-least-once delivery — potentially multiple attempts are made to deliver each message, until at least one succeeds; again, in more causal terms this means that messages can be duplicated but are never lost.
+    * This adds the overhead of keeping the state at the sending end and having an acknowledgment mechanism at the receiving end
+  Exactly-once delivery — each message is delivered exactly once to the recipient; the message can neither be lost nor be duplicated.
+    * in addition to the overhead added by at-least-once delivery, it requires the state to be kept at the receiving end in order to filter out duplicate deliveries
+* in Akka, for a given pair of actors, messages sent directly from the first to the second will not be received out-of-order.
+* we need to be able to correlate requests and responses. Hence, we add one more field to our messages, so that an ID can be provided by the requester (we will add this code to our app in a later step):
+    sealed trait DeviceMessage
+    final case class ReadTemperature(requestId: Long, replyTo: ActorRef[RespondTemperature]) extends DeviceMessage
+    final case class RespondTemperature(requestId: Long, value: Option[Double])
+    * it is also a good idea to include an ID field to provide maximum flexibility
+
+
+* Akka provides a Death Watch feature that allows an actor to watch another actor and be notified if the other actor is stopped.
+    * Unlike supervision, watching is not limited to parent-child relationships, any actor can watch any other actor as long as it knows the ActorRef
+    * After a watched actor stops, the watcher receives a Terminated(actorRef) signal which also contains the reference to the watched actor
+    * The watcher can either handle this message explicitly or will fail with a DeathPactException. This latter is useful if the actor can no longer perform its own duties after the watched actor has been stopped.
+    *
+
+* Scheduling the query timeout
+    *  Using Behaviors.withTimers and startSingleTimer to schedule a message that will be sent after a given delay.
+    *
+* Actor could be a query as well
+    * example: https://doc.akka.io/docs/akka/2.5/typed/guide/tutorial_5.html
+* https://github.com/akka/akka/tree/main/akka-docs/src/test/scala/typed/tutorial_5
