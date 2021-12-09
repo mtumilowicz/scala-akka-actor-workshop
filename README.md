@@ -16,30 +16,27 @@
   * [8 Akka anti-patterns you'd better be aware of by Manuel Bernhardt](https://www.youtube.com/watch?v=hr3UdktX-As)
   * https://doc.akka.io/docs/akka/2.5/typed/index.html
   * https://github.com/akka/akka/tree/main/akka-docs/src/test/scala/typed/tutorial_5
+  * https://dzone.com/articles/akka-dispatcher-all-that-you-need-to-know
 
-* antipattern
-    * closing over mutable state in asynchronous calls
-      * instead use queries for state inquiries (using the ask pattern)
-    * if your actor system has no hierarchy you are missing the point
-      * actor systems are designed to handle failures through hierarchy
-    * supervision too often misunderstood / abused
-      * use: try object, try-catch; supervision is for when things are going really bad
-      like exploding - try restarting
-* may be worthwhile to first look on the previous workshops
-    * scala basics: https://github.com/mtumilowicz/scala213-functional-programming-collections-workshop
-    * actors basics: https://github.com/mtumilowicz/kotlin-functional-programming-actors-workshop
+## preface
 * goals of this workshops
     * introduction to actors in akka context
         * ActorSystem, ActorContext, ActorRef, Dispatchers, Behavior
         * supervision and failure handling
         * lifecycle
+* workshop plan
+    * bank: implement debiting account
+    * device: implement query
+* may be worthwhile to first look on the previous workshops
+    * scala basics: https://github.com/mtumilowicz/scala213-functional-programming-collections-workshop
+    * actors basics: https://github.com/mtumilowicz/kotlin-functional-programming-actors-workshop
+
 ## introduction
 * two ultimate goals during software development
     1. complexity has to stay as low as possible
     1. resources must be used efficiently while you scale the application
 * if we want to scale, the programming model has to be asynchronous
     * allows components to continue working while others haven’t responded yet
-    * actor model chooses the abstraction of sending and receiving messages
 * actors vs synchronous approach
     |                                   |actors   |synchronous approach   |
     |---                                |---      |---|
@@ -55,110 +52,75 @@
     * interface
         * nothing is shared between actors
         * information is passed in messages
-    * if system coupled on all three axes can only exist on one runtime and will fail completely if
+    * digression: system coupled on all three axes can only exist on one runtime and will fail completely if
     one of its components fails
 
 ## constructs
-* ActorSystem
+* `ActorSystem`
     * actors can create other actors, but who creates the first one?
-        * first thing that every Akka application does is create an ActorSystem
-    * typically one ActorSystem per JVM process
-    * hierarchical group of actors which share common configuration
+        * first thing that every Akka application does is create an `ActorSystem`
+    * typically one `ActorSystem` per JVM process
+        * heavyweight structure that will allocate threads, so create one per logical application
+    * is a hierarchical group of actors which share common configuration
         * similar to URL path structure
-            * ActorPath - unique path to an actor that shows the creation path up through the actor tree to the
-            root actor
+            * `ActorPath` - creation path from the root actor
+                * example: `akka://bank/user/Account-1#-747509914`
             * every actor has a name (unique per level in the hierarchy)
-                * generated automatically, but it’s a good idea to name all your actors
-    * entry point for creating or looking up actors
-    * is a heavyweight structure that will allocate threads, so create one per logical application
-* ActorRef
-    * ActorSystem returns an address (ActorRef) to the created top-level actor instead of the actor itself
-        * makes sense - actor could be on another server
-    * can be used to send messages to the actor
-    * message -> ActorRef -> Mailbox -> Actor
+    * `val system: ActorSystem[BankOperation] = ActorSystem(Bank(), "bank")    `
+* `ActorRef`
+    * represents the address of an actor in Akka
+    * actor could be on another server
+    * used to send messages to the actor
+    * you don't have access to the actor state because ActorRef has no notion about internal state
+        * good for testing: focus on behavior and interactions
+    * message -> `ActorRef` -> Mailbox -> Actor
+    * `val accountRef: ActorRef[AccountOperation] = context.spawn(account.behavior(),s"Account-$rawId")`
+* `Mailbox`
+    * each actor in Akka has a Mailbox, this is where the messages are enqueued before being processed by the actor
+    * `context.spawn(childBehavior, "bounded-mailbox-child", MailboxSelector.bounded(100))`
 * Dispatchers
-    * in the real world, dispatchers are the communication coordinators responsible for receiving and passing
-    messages
-        * for example, emergency services 911 - the dispatchers are the people responsible for taking
-        in the call and passing on the messages to the other departments like the medical, fire station,
-        police, etc
-    * the main engine of an ActorSystem
+    * are the communication coordinators responsible for receiving and passing messages
+        * example: emergency services 911
+            * dispatchers pass on the messages to the departments: medical, fire station, police, etc
+    * the main engine of an `ActorSystem`
     * responsible for selecting an actor and it’s messages and assigning them the CPU
         * actors are lightweight because they run on top of dispatchers
             * actors aren’t proportional to the number of threads
             * 2.7 million actors vs 4096 threads can fit in 1 GB
     * actors are invoked at some point by a dispatcher
-        * dispatcher pushes the messages in the mailbox through the actors
-    * configuring custom dispatcher
-        ```
-        context.spawn(yourBehavior, "DispatcherFromConfig", DispatcherSelector.fromConfig("your-dispatcher"))
-        ```
-        and `application.conf`
-        ```
-        my-dispatcher {
-            # Dispatcher is the name of the event-based dispatcher
-            type = Dispatcher
-            # What kind of ExecutionService to use
-            executor = "fork-join-executor"
-            # Configuration for the fork join pool
-            fork-join-executor {
-                # Min number of threads to cap factor-based parallelism number to
-                parallelism-min = 2
-                # Parallelism (threads) ... ceil(available processors * factor)
-                parallelism-factor = 2.0
-                # Max number of threads to cap factor-based parallelism number to
-                parallelism-max = 10
-            }
-            # Throughput defines the maximum number of messages to be
-            # processed per actor before the thread jumps to the next actor.
-            # Set to 1 for as fair as possible.
-            throughput = 100
-        }
-        ```
+    * `context.spawn(yourBehavior, "DispatcherFromConfig", DispatcherSelector.fromConfig("your-dispatcher"))`
 * Actor = Behavior + Context (in which behavior is executed)
-    * ActorContext
-        * provides access to the Actor’s own identity ("self"), list of child actors, etc
-        * `context.spawn()` creates a child actor
-        * `system.spawn()` creates top level
-    * Behavior
-        * defines how actor reacts to the messages that it receives
-        ```
-        def apply(): Behavior[SayHello] =
-            Behaviors.setup { context => // typically used as the outer most behavior when spawning an actor
-                val greeter = context.spawn(HelloWorld(), "greeter")
-
-                Behaviors.receiveMessage { message => // useful for when the context is already accessible by other means, like being wrapped in an [[setup]] or similar
-                    val replyTo = context.spawn(HelloWorldBot(max = 3), message.name)
-                    greeter ! HelloWorld.Greet(message.name, replyTo)
-                    Behaviors.same
-                }
+    * Actor can perform the following actions when processing a message:
+        * send a finite number of messages to other Actors it knows
+            * `actorRef ! message`
+        * create a finite number of Actors
+            * `context.spawn(account.behavior(),s"Account-$rawId")
+        * designate the behavior for the next message
+            ```
+            private def behavior(implicit state: AccountState): Behavior[AccountOperation] = Behaviors.receiveMessage {
+              case command: AccountCommand => handleCommand(command)
+              case query: AccountQuery => handleQuery(query)
             }
-        ```
+            ```
 
 ## supervision
 * actor is the supervisor of the created child actor
 * supervision hierarchy is fixed for the lifetime of a child actor
 * actors that are most likely to crash should be as low down the hierarchy as possible
-    * when a fault occurs in the top level of the actor system, it could restart all the
-    top-level actors or even shut down the actor system.
-* The supervisor doesn’t try to fix the actor or its state.
-    * It simply renders a judgment on how to recover, and then triggers the corresponding strategy
-* mailbox for a crashed actor is suspended until the supervisor will decide what to do with the exception
+* supervisor doesn’t try to fix the actor or its state
+    * simply renders a judgment on how to recover, and then triggers the corresponding strategy
+
 * The supervisor has four options when deciding what to do with the actor:
     * Restart
-        * The actor must be re-created from its Props
-        * After it’s restarted (or rebooted, if you will), the actor will continue to process messages.
-        * Since the rest of the application uses an ActorRef to communicate with the actor, the new
-        actor instance will automatically get the next messages.
+        * since the rest of the application uses an `ActorRef` to communicate with the actor, the new
+        actor instance will automatically get the next messages
     * Resume
-        * The same actor instance should continue to process messages;
-        * the crash is ignored.
+        * crash is ignored
     * Stop
-        * The actor must be terminated
-        * It will no longer take part in processing messages.
+        * it will no longer take part in processing messages
+        * default strategy
     * Escalate
-        * The supervisor doesn’t know what to do with it and escalates the problem to its parent,
-        which is also a supervisor
+        * supervisor doesn’t know what to do with it and escalates the problem to its parent
 
 ## failure
 * actor provides two separate flows
@@ -209,7 +171,6 @@
   designate the behavior for the next message
 * Typed Actors are implemented using JDK Proxies which provide a pretty easy-worked API to intercept method calls.
 * Just as with regular Akka Actors, Typed Actors process one call at a time.
-* supervision?
 * receptionist (actor discovery)
     * You register the specific actors that should be discoverable from other nodes in the local Receptionist instance
     *  The reply to such a Find request is a Listing, which contains a Set of actor references that are registered for the key
@@ -218,24 +179,8 @@
     * Behaviors.setup { ctx => ctx.system.receptionist ! Receptionist.Register(PingServiceKey, ctx.self)
     *
 * messageAdapter
-* dispatcher
-    * https://doc.akka.io/docs/akka/current/typed/dispatchers.html
 * state
     * https://blog.rockthejvm.com/pipe-pattern/
-
-## untyped
-trait Actor {
-  def receive: PartialFunction[Any, Unit] // actually type alias `Receive`
-}
-* Akka actors are untyped: we can send any message to an actor even though it most probably only handles specific ones – the compiler is not able to help us
-trait ActorRef { // actually represents the address of an actor in Akka
-  def !(message: Any)(implicit sender: ActorRef = Actor.noSender): Unit
-}
-* The ! operator allows us to send a message of type Any to the actor identified by the respective address
-trait ActorContext {
-  def become(behavior: PartialFunction[Any, Unit]): Unit // actually type alias `Receive`
-}
-* It returns Unit which means that designating a different behavior for the next message must happen as a side effect.
 
 ## typed
 * But Akka Typed also resembles the actual definition of the actor model much closer than Akka by dropping the Actor trait and conceptually treating behavior as a function from a typed message to the next behavior
@@ -254,8 +199,6 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
   * Behaviors.receive defines message-handling behavior.
     * You pass it a function that has parameters for both the actor context, and an argument containing the message
     * Actors created from this behavior will do nothing until they receive a message of a type that this behavior can handle.
-* you don't have access to the actor state because ActorRef has no notion about internal state
-  * test: behavior and interactions
 
 
 * In summary, this is what happens when an actor receives a message:
@@ -278,11 +221,6 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
     * Whenever an actor is stopped, all of its children are recursively stopped too
     * To stop an actor, the recommended pattern is to return Behaviors.stopped()
     * The Akka actor API exposes some lifecycle signals, for example PostStop is sent just before the actor stops
-
-* Failure handling
-    * Whenever an actor fails (throws an exception or an unhandled exception bubbles out from onMessage) the failure information is propagated to the supervision strategy, which then decides how to handle the exception caused by the actor.
-    * The supervision strategy is typically defined by the parent actor when it spawns a child actor. In this way, parents act as supervisors for their children.
-    * The default supervisor strategy is to stop the child
 
 * In the world of actors, protocols take the place of interfaces
 * Akka provides the following behavior for message sends:
@@ -316,8 +254,6 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
 * Actor could be a query as well
     * example: https://doc.akka.io/docs/akka/2.5/typed/guide/tutorial_5.html
 
-* dispatcher
-    * context.spawn(yourBehavior, "DispatcherFromConfig", DispatcherSelector.fromConfig("your-dispatcher"))
 * The root actor, also called the guardian actor, is created along with the ActorSystem. Messages sent to the actor system are directed to the root actor.
     * val system: ActorSystem[HelloWorldMain.Start] =
         ActorSystem(HelloWorldMain.main, "hello")
@@ -356,3 +292,11 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
         val manualTime: ManualTime = ManualTime()
         manualTime.expectNoMessageFor(9.millis, probe)
         manualTime.timePasses(2.millis)
+* antipattern
+    * closing over mutable state in asynchronous calls
+      * instead use queries for state inquiries (using the ask pattern)
+    * if your actor system has no hierarchy you are missing the point
+      * actor systems are designed to handle failures through hierarchy
+    * supervision too often misunderstood / abused
+      * use: try object, try-catch; supervision is for when things are going really bad
+      like exploding - try restarting
