@@ -19,7 +19,6 @@ class DeviceManagerSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
       managerActor ! RequestTrackDevice("group1", "device", probe.ref)
       val registered1 = probe.receiveMessage()
 
-      // another group
       managerActor ! RequestTrackDevice("group2", "device", probe.ref)
       val registered2 = probe.receiveMessage()
 

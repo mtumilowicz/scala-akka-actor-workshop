@@ -9,8 +9,6 @@ import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors, Tim
 
 import scala.concurrent.duration._
 
-//#query-full
-//#query-outline
 object DeviceGroupQuery {
 
   def apply(
@@ -50,13 +48,8 @@ class DeviceGroupQuery(
 
   private val respondTemperatureAdapter = context.messageAdapter(WrappedRespondTemperature.apply)
 
-  //#query-outline
-  //#query-state
   private var repliesSoFar = Map.empty[String, TemperatureReading]
   private var stillWaiting = deviceIdToActor.keySet
-
-  //#query-state
-  //#query-outline
 
   deviceIdToActor.foreach {
     case (deviceId, device) =>
@@ -64,8 +57,6 @@ class DeviceGroupQuery(
       device ! Device.ReadTemperature(0, respondTemperatureAdapter)
   }
 
-  //#query-outline
-  //#query-state
   override def onMessage(msg: Command): Behavior[Command] =
     msg match {
       case WrappedRespondTemperature(response) => onRespondTemperature(response)
@@ -99,9 +90,7 @@ class DeviceGroupQuery(
     stillWaiting = Set.empty
     respondWhenAllCollected()
   }
-  //#query-state
 
-  //#query-collect-reply
   private def respondWhenAllCollected(): Behavior[Command] = {
     if (stillWaiting.isEmpty) {
       requester ! RespondAllTemperatures(requestId, repliesSoFar)
@@ -110,8 +99,4 @@ class DeviceGroupQuery(
       this
     }
   }
-  //#query-collect-reply
-  //#query-outline
 }
-//#query-outline
-//#query-full

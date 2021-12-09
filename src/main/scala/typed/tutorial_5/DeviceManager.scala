@@ -7,12 +7,9 @@ package typed.tutorial_5
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors}
 
-//#device-manager-full
 object DeviceManager {
   def apply(): Behavior[Command] =
     Behaviors.setup(context => new DeviceManager(context))
-
-  //#device-manager-msgs
 
   sealed trait Command
 
@@ -29,9 +26,6 @@ object DeviceManager {
   final case class ReplyDeviceList(requestId: Long, ids: Set[String])
 
   private final case class DeviceGroupTerminated(groupId: String) extends DeviceManager.Command
-  //#device-manager-msgs
-
-  //#query-protocol
 
   final case class RequestAllTemperatures(requestId: Long, groupId: String, replyTo: ActorRef[RespondAllTemperatures])
       extends DeviceGroupQuery.Command
@@ -45,7 +39,6 @@ object DeviceManager {
   case object TemperatureNotAvailable extends TemperatureReading
   case object DeviceNotAvailable extends TemperatureReading
   case object DeviceTimedOut extends TemperatureReading
-  //#query-protocol
 }
 
 class DeviceManager(context: ActorContext[DeviceManager.Command])
@@ -102,4 +95,3 @@ class DeviceManager(context: ActorContext[DeviceManager.Command])
   }
 
 }
-//#device-manager-full
