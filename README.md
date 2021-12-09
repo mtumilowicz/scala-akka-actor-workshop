@@ -15,6 +15,7 @@
   * [Farewell Any - Unit, welcome Akka Typed! by Heiko Seeberger](https://www.youtube.com/watch?v=YW2wiBERKH8)
   * [8 Akka anti-patterns you'd better be aware of by Manuel Bernhardt](https://www.youtube.com/watch?v=hr3UdktX-As)
   * https://doc.akka.io/docs/akka/2.5/typed/index.html
+  * https://github.com/akka/akka/tree/main/akka-docs/src/test/scala/typed/tutorial_5
 
 * antipattern
     * closing over mutable state in asynchronous calls
@@ -308,4 +309,10 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
     *
 * Actor could be a query as well
     * example: https://doc.akka.io/docs/akka/2.5/typed/guide/tutorial_5.html
-* https://github.com/akka/akka/tree/main/akka-docs/src/test/scala/typed/tutorial_5
+
+* dispatcher
+    * context.spawn(yourBehavior, "DispatcherFromConfig", DispatcherSelector.fromConfig("your-dispatcher"))
+* The root actor, also called the guardian actor, is created along with the ActorSystem. Messages sent to the actor system are directed to the root actor.
+    * val system: ActorSystem[HelloWorldMain.Start] =
+        ActorSystem(HelloWorldMain.main, "hello")
+* Actors seldom have a response message from another actor as a part of their protocol (see adapted response)
