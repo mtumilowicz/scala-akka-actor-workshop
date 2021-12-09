@@ -210,7 +210,13 @@
 * Typed Actors are implemented using JDK Proxies which provide a pretty easy-worked API to intercept method calls.
 * Just as with regular Akka Actors, Typed Actors process one call at a time.
 * supervision?
-* receptionist?
+* receptionist (actor discovery)
+    * You register the specific actors that should be discoverable from other nodes in the local Receptionist instance
+    *  The reply to such a Find request is a Listing, which contains a Set of actor references that are registered for the key
+    * you can also subscribe to changes with the Receptionist.Subscribe message. It will send Listing messages to the subscriber when entries for a key are changed.
+    * The primary scenario for using the receptionist is when an actor needs to be discovered by another actor but you are unable to put a reference to it in an incoming message
+    * Behaviors.setup { ctx => ctx.system.receptionist ! Receptionist.Register(PingServiceKey, ctx.self)
+    *
 * messageAdapter
 * dispatcher
     * https://doc.akka.io/docs/akka/current/typed/dispatchers.html
@@ -316,3 +322,37 @@ abstract class ExtensibleBehavior[T] extends Behavior[T] {
     * val system: ActorSystem[HelloWorldMain.Start] =
         ActorSystem(HelloWorldMain.main, "hello")
 * Actors seldom have a response message from another actor as a part of their protocol (see adapted response)
+    * Most often the sending actor does not, and should not, support receiving the response messages of another actor
+    * In such cases we need to provide an ActorRef of the right type and adapt the response message to a type that the sending actor can handle
+    * context.messageAdapter(rsp => WrappedBackendResponse(rsp))
+* Behaviors.withTimers
+* Fault Tolerance
+    * When an actor throws an unexpected exception, a failure, while processing a message or during initialization, the actor will by default be stopped.
+    * For failures it is useful to apply the “let it crash” philosophy: instead of mixing fine grained recovery and correction of internal state that may have become partially invalid because of the failure with the business logic we move that responsibility somewhere else. For many cases the resolution can then be to “crash” the actor, and start a new one, with a fresh state that we know is valid.
+* supervision
+    * Supervision allows you to declaratively describe what should happen when a certain type of exceptions are thrown inside an actor
+        * Behaviors.supervise(behavior).onFailure[IllegalStateException](SupervisorStrategy.restart)
+    * Child actors are often started in a setup block that is run again when the parent actor is restarted. The child actors are stopped to avoid resource leaks of creating new child actors each time the parent is restarted
+    * In some scenarios it may be useful to push the decision about what to do on a failure upwards in the Actor hierarchy and let the parent actor handle what should happen on failures
+        * For a parent to be notified when a child is terminated it has to watch the child
+        * If the child was stopped because of a failure the ChildFailed signal will be received which will contain the cause
+        * ChildFailed extends Terminated so if your use case does not need to distinguish between stopping and failing you can handle both cases with the Terminated signal
+* Behaviors as Finite state machines
+    * FSM event becomes the type of the message Actor supports
+    * Each state becomes a distinct behavior
+* testing
+    * class ScalaTestIntegrationExampleSpec extends ScalaTestWithActorTestKit with WordSpecLike
+    * val pinger = spawn(echoActor, "ping")
+      val probe = createTestProbe[Pong]()
+      pinger ! Ping("hello", probe.ref)
+      probe.expectMessage(Pong("hello"))
+    * mocking
+        * mock behaviors that accept and possibly respond to messages in the same way the other actor would do but without executing any actual logic
+        * In addition to this it can also be useful to observe those interactions to assert that the component under test did send the expected messages
+        * Behaviors.monitor(monitor: ActorRef[T], behavior: Behavior[T])
+            * Behavior decorator that copies all received message to the designated monitor before invoking the wrapped behavior
+    * Controlling the scheduler
+        * a scheduler where you can manually, explicitly advance the clock
+        val manualTime: ManualTime = ManualTime()
+        manualTime.expectNoMessageFor(9.millis, probe)
+        manualTime.timePasses(2.millis)
