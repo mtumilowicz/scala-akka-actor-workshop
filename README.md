@@ -117,6 +117,23 @@
     * Actor can perform the following actions when processing a message:
         * send a finite number of messages to other Actors it knows
             * `actorRef ! message`
+            * Akka provides the following behavior for message sends
+                * at-most-once delivery, that is, no guaranteed delivery
+                    * digression about delivery semantics
+                        * at-most-once delivery
+                            * each message is delivered zero or one time
+                            * messages can be lost, but never duplicated
+                        * at-least-once delivery
+                            * potentially multiple attempts until at least one succeeds
+                            * messages can be duplicated but are never lost
+                            * adds overhead of keeping the state at the sending end and having an acknowledgment
+                            mechanism at the receiving end
+                        * exactly-once delivery
+                            * the message can neither be lost nor be duplicated
+                          * overhead: at-least-once delivery + it requires the state to be kept at the receiving
+                          end in order to filter out duplicate deliveries
+                * for a given pair of actors, messages sent directly from the first to the second will not be
+                received out-of-order
         * create a finite number of Actors
             * `context.spawn(account.behavior(),s"Account-$rawId")
         * designate the behavior for the next message
@@ -156,6 +173,24 @@
         * use `def pipeToSelf[Value](future: Future[Value])(mapResult: Try[Value] => T)`
             * sends the result of the given Future to this Actor ("self"), after adapted it with the given function
 
+## interaction Patterns
+* Fire and Forget
+    * is no way to know if the message was received, the processing succeeded or failed
+    * `actorRef ! message`
+* Request-Adapted Response
+    ```
+    case class Request(requestId: Long, query: String, replyTo: ActorRef[Response])
+    case class Response(requestId: Long, result: String)
+    ```
+    * sending actor does not, and should not, support receiving the response messages of another actor
+        ```
+        context.messageAdapter {
+        case type1 => adaptedType1
+        ...
+        }
+        ```
+    * it is also a good idea to include an ID field to provide maximum flexibility
+        * we need to be able to correlate requests and responses
 
 ## supervision
 * allows you to declaratively describe what should happen when a certain type of exceptions are thrown inside an actor
@@ -220,37 +255,11 @@ we know is valid
     * `receiveSignal` takes care of a few special messages like PreRestart or Terminated
     which of course are not covered by the message type `T`
 
-## typed
-* Akka provides the following behavior for message sends:
-
-  At-most-once delivery, that is, no guaranteed delivery.
-  Message ordering is maintained per sender, receiver pair.
-* The delivery semantics provided by messaging subsystems typically fall into the following categories:
-
-  At-most-once delivery — each message is delivered zero or one time; in more causal terms it means that messages can be lost, but are never duplicated.
-  At-least-once delivery — potentially multiple attempts are made to deliver each message, until at least one succeeds; again, in more causal terms this means that messages can be duplicated but are never lost.
-    * This adds the overhead of keeping the state at the sending end and having an acknowledgment mechanism at the receiving end
-  Exactly-once delivery — each message is delivered exactly once to the recipient; the message can neither be lost nor be duplicated.
-    * in addition to the overhead added by at-least-once delivery, it requires the state to be kept at the receiving end in order to filter out duplicate deliveries
-* in Akka, for a given pair of actors, messages sent directly from the first to the second will not be received out-of-order.
-* we need to be able to correlate requests and responses. Hence, we add one more field to our messages, so that an ID can be provided by the requester (we will add this code to our app in a later step):
-    sealed trait DeviceMessage
-    final case class ReadTemperature(requestId: Long, replyTo: ActorRef[RespondTemperature]) extends DeviceMessage
-    final case class RespondTemperature(requestId: Long, value: Option[Double])
-    * it is also a good idea to include an ID field to provide maximum flexibility
-
-* Scheduling the query timeout
-    *  Using Behaviors.withTimers and startSingleTimer to schedule a message that will be sent after a given delay.
-    *
-
-* The root actor, also called the guardian actor, is created along with the ActorSystem. Messages sent to the actor system are directed to the root actor.
-    * val system: ActorSystem[HelloWorldMain.Start] =
-        ActorSystem(HelloWorldMain.main, "hello")
-* Actors seldom have a response message from another actor as a part of their protocol (see adapted response)
-    * Most often the sending actor does not, and should not, support receiving the response messages of another actor
-    * In such cases we need to provide an ActorRef of the right type and adapt the response message to a type that the sending actor can handle
-    * context.messageAdapter(rsp => WrappedBackendResponse(rsp))
-* Behaviors.withTimers
+## scheduling
+* use `Behaviors.withTimers { timers => timers.startSingleTimer(msg, 1.second) }`
+    * `def startSingleTimer(msg: T, delay: FiniteDuration)`
+        * start a timer that will send msg once to the self actor after the given delay
+    * 'def startTimerAtFixedRate(msg: T, interval: FiniteDuration)'
 
 ## testing
 * `class ScalaTestIntegrationExampleSpec extends ScalaTestWithActorTestKit`
