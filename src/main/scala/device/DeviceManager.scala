@@ -2,10 +2,10 @@
  * Copyright (C) 2009-2021 Lightbend Inc. <https://www.lightbend.com>
  */
 
-package typed.tutorial_5
+package device
 
-import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors}
+import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 
 object DeviceManager {
   def apply(): Behavior[Command] =

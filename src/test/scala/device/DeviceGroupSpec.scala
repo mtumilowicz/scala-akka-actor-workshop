@@ -2,12 +2,12 @@
  * Copyright (C) 2009-2021 Lightbend Inc. <https://www.lightbend.com>
  */
 
-package typed.tutorial_5
+package device
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.scalatest.wordspec.AnyWordSpecLike
-import typed.tutorial_5.Device._
-import typed.tutorial_5.DeviceManager._
+import device.Device._
+import device.DeviceManager._
 
 import scala.concurrent.duration._
 

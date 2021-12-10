@@ -2,7 +2,7 @@
  * Copyright (C) 2009-2021 Lightbend Inc. <https://www.lightbend.com>
  */
 
-package typed.tutorial_5
+package device
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.scalatest.wordspec.AnyWordSpecLike
