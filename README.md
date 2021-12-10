@@ -27,7 +27,7 @@
         * lifecycle
 * workshop plan
     * bank: implement debiting account
-    * device: implement query
+    * device: implement onRespondTemperature in query
 * may be worthwhile to first look on the previous workshops
     * scala basics: https://github.com/mtumilowicz/scala213-functional-programming-collections-workshop
     * actors basics: https://github.com/mtumilowicz/kotlin-functional-programming-actors-workshop
