@@ -233,9 +233,9 @@
     * instead of mixing fine grained recovery and correction of internal state that may have
     become partially invalid because of the failure with the business logic we move that
     responsibility somewhere else
-* for many cases the resolution can then be to "crash" the actor, and start a new one, with a fresh state that
-we know is valid
-    * event sourced from database
+    * for many cases the resolution can then be to "crash" the actor, and start a new one, with a fresh state that
+    we know is valid
+      * event sourced from database
 
 ## actor lifecycle
 * every actor that is created must also explicitly be destroyed
