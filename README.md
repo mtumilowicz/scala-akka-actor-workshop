@@ -227,8 +227,6 @@
 * actor provides two separate flows
     * one for normal logic - consists of actors that handle normal messages
     * one for fault recovery logic - consists of actors that monitor the actors in the normal flow
-* instead of catching exceptions in an actor, we’ll just let the actor crash
-    * no error handling or fault recovery logic in actor
 * in most cases, you don’t want to reprocess a message, because it probably caused the error in the first place
     * Akka chooses not to provide the failing message to the mailbox again after a restart
 * it is useful to apply the "let it crash" philosophy
