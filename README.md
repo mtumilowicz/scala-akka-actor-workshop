@@ -58,12 +58,6 @@
         * information is passed in messages
     * digression: system coupled on all three axes can only exist on one runtime and will fail completely if
     one of its components fails
-* Carl Hewitt explains the actor as the fundamental unit of computation
-    * embodying processing (do things)
-    * storage (state)
-    * communications
-        * collaboration between actors happens via asynchronous communication (decoupling of sender and receiver)
-* "everything is an actor" and "one actor is no actor, they come in systems"
 
 ## constructs
 * `ActorSystem`
