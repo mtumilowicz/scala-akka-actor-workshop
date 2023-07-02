@@ -210,7 +210,7 @@
     * Escalate
         * supervisor doesn’t know what to do with it and escalates the problem to its parent
 * is too often misunderstood / abused
-    * use: try object, try-catch
+    * use: `Try` object, try-catch
     * supervision is for when things are going really bad like exploding - try restarting
 * Death Watch feature
     * allows an actor to watch another actor and be notified if the other actor is stopped
