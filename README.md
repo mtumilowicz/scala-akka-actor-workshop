@@ -23,7 +23,7 @@
   * https://blog.rockthejvm.com/pipe-pattern/
 
 ## preface
-* goals of this workshops
+* goals of this workshop
     * introduction to actors in akka context
         * ActorSystem, ActorContext, ActorRef, Dispatchers, Behavior
         * supervision and failure handling
